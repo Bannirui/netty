@@ -8,7 +8,7 @@ import java.nio.IntBuffer;
  * @description
  *
  * 当需要与NIO Channel进行交互时 就需要使用到NIO Buffer 数据从Buffer读取到Channel中 并且从Channel中写入到Buffer中
- * 一个Buffer就是一块内存区域 可以在这个内存区域中进行数据的读写 NIO Buffer本质就是对这块内存区域的分装 提供了一些API对数据进行读写
+ * 一个Buffer就是一块内存区域 可以在这个内存区域中进行数据的读写 NIO Buffer本质就是对这块内存区域的封装 提供了一些API对数据进行读写
  *
  * Buffer的类型
  *   - ByteBuffer

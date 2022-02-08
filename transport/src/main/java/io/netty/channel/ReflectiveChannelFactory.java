@@ -33,15 +33,14 @@ public class ReflectiveChannelFactory<T extends Channel> implements ChannelFacto
         try {
             this.constructor = clazz.getConstructor();
         } catch (NoSuchMethodException e) {
-            throw new IllegalArgumentException("Class " + StringUtil.simpleClassName(clazz) +
-                    " does not have a public non-arg constructor", e);
+            throw new IllegalArgumentException("Class " + StringUtil.simpleClassName(clazz) + " does not have a public non-arg constructor", e);
         }
     }
 
     @Override
     public T newChannel() {
         try {
-            return constructor.newInstance();
+            return constructor.newInstance(); // 反射调用Channel的无参构造方法创建Channel NioSocketChannel充当客户端功能 它的创建时机在connect()的时候 NioServerSocketChannel充当服务端 它的创建时机在bind()的时候
         } catch (Throwable t) {
             throw new ChannelException("Unable to create Channel from class " + constructor.getDeclaringClass(), t);
         }
@@ -49,7 +48,6 @@ public class ReflectiveChannelFactory<T extends Channel> implements ChannelFacto
 
     @Override
     public String toString() {
-        return StringUtil.simpleClassName(ReflectiveChannelFactory.class) +
-                '(' + StringUtil.simpleClassName(constructor.getDeclaringClass()) + ".class)";
+        return StringUtil.simpleClassName(ReflectiveChannelFactory.class) + '(' + StringUtil.simpleClassName(constructor.getDeclaringClass()) + ".class)";
     }
 }

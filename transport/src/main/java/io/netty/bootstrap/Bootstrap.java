@@ -119,8 +119,8 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
     /**
      * Connect a {@link Channel} to the remote peer.
      */
-    public ChannelFuture connect(String inetHost, int inetPort) {
-        return connect(InetSocketAddress.createUnresolved(inetHost, inetPort));
+    public ChannelFuture connect(String inetHost, int inetPort) { // NioSocketChannel触发Channel创建
+        return this.connect(InetSocketAddress.createUnresolved(inetHost, inetPort));
     }
 
     /**
@@ -135,8 +135,8 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
      */
     public ChannelFuture connect(SocketAddress remoteAddress) {
         ObjectUtil.checkNotNull(remoteAddress, "remoteAddress");
-        validate();
-        return doResolveAndConnect(remoteAddress, config.localAddress());
+        this.validate(); // 校验参数是否正确设置
+        return this.doResolveAndConnect(remoteAddress, config.localAddress());
     }
 
     /**
@@ -152,7 +152,7 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
      * @see #connect()
      */
     private ChannelFuture doResolveAndConnect(final SocketAddress remoteAddress, final SocketAddress localAddress) {
-        final ChannelFuture regFuture = initAndRegister();
+        final ChannelFuture regFuture = this.initAndRegister();
         final Channel channel = regFuture.channel();
 
         if (regFuture.isDone()) {

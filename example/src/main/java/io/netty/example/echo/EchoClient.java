@@ -52,9 +52,9 @@ public final class EchoClient {
         }
 
         // Configure the client.
-        EventLoopGroup group = new NioEventLoopGroup();
+        EventLoopGroup group = new NioEventLoopGroup(); // 客户端1个group Netty中的线程池
         try {
-            Bootstrap b = new Bootstrap();
+            Bootstrap b = new Bootstrap(); // 创建客户端实例
             b.group(group)
              .channel(NioSocketChannel.class)
              .option(ChannelOption.TCP_NODELAY, true)
@@ -68,7 +68,7 @@ public final class EchoClient {
                      //p.addLast(new LoggingHandler(LogLevel.INFO));
                      p.addLast(new EchoClientHandler());
                  }
-             });
+             }); // 指定handler 客户端处理请求过程中使用的handlers
 
             // Start the client.
             ChannelFuture f = b.connect(HOST, PORT).sync();
