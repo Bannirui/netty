@@ -162,13 +162,13 @@ import java.util.concurrent.TimeUnit;
  * }
  * </pre>
  */
-public interface ChannelFuture extends Future<Void> {
+public interface ChannelFuture extends Future<Void> { // 相较于Future接口 将channel关联了进来
 
     /**
      * Returns a channel where the I/O operation associated with this
      * future takes place.
      */
-    Channel channel();
+    Channel channel(); // ChannelFuture关联的channel
 
     @Override
     ChannelFuture addListener(GenericFutureListener<? extends Future<? super Void>> listener);
@@ -208,5 +208,5 @@ public interface ChannelFuture extends Future<Void> {
      *     <li>{@link #syncUninterruptibly()}</li>
      * </ul>
      */
-    boolean isVoid();
+    boolean isVoid(); // 标记future是void 这样就不允许addListener() sync() await()以及他们的几个重载方法
 }
