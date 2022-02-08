@@ -71,10 +71,10 @@ public final class EchoServer {
              });
 
             // Start the server.
-            ChannelFuture f = b.bind(PORT).sync(); // Netty异步编程
+            ChannelFuture f = b.bind(PORT).sync(); // Netty异步编程 main线程调用bind()方法返回一个ChannelFuture bind()方法是一个异步方法 当某个执行线程执行了真正的绑定操作后 那个执行线程会标记这个future为成功 然后main线程调用sync()方法就会返回 如果bind()失败 sync()方法会将异常抛出来 进入finally代码块
 
             // Wait until the server socket is closed.
-            f.channel().closeFuture().sync();
+            f.channel().closeFuture().sync(); // 绑定端口bind()成功后 进到当前方法 channel()方法获取到该future关联的channel channel.closeFuture()也会返回一个ChannelFuture 然后调用sync()方法 这个sync()方法的返回条件是: 有其他的线程关闭了NioServerSocketChannel 往往是因为需要停掉服务了 然后那个线程会设置future的状态 此时main线程执行sync()方法才会返回
         } finally {
             // Shut down all event loops to terminate all threads.
             bossGroup.shutdownGracefully();

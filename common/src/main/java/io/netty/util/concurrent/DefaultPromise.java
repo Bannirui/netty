@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
-public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
+public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> { // 该类实现了Promise接口 但是没有实现ChannelFuture接口 所以该类和Channel联系不起来 DefaultChannelPromise综合了ChannelFuture和Promise接口 其中的大部分实现继承自该类
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(DefaultPromise.class);
     private static final InternalLogger rejectedExecutionLogger =
             InternalLoggerFactory.getInstance(DefaultPromise.class.getName() + ".rejectedExecution");
@@ -47,25 +47,25 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             StacklessCancellationException.newInstance(DefaultPromise.class, "cancel(...)"));
     private static final StackTraceElement[] CANCELLATION_STACK = CANCELLATION_CAUSE_HOLDER.cause.getStackTrace();
 
-    private volatile Object result;
-    private final EventExecutor executor;
+    private volatile Object result; // 保存执行结果
+    private final EventExecutor executor; // 执行任务的线程池
     /**
      * One or more listeners. Can be a {@link GenericFutureListener} or a {@link DefaultFutureListeners}.
      * If {@code null}, it means either 1) no listeners were added yet or 2) all listeners were notified.
      *
      * Threading - synchronized(this). We must support adding listeners when there is no EventExecutor.
      */
-    private Object listeners;
+    private Object listeners; // 监听者 回调函数 任务执行结束后执行(任务执行正常或者异常结束后都回调)
     /**
      * Threading - synchronized(this). We are required to hold the monitor to use Java's underlying wait()/notifyAll().
      */
-    private short waiters;
+    private short waiters; // 等待这个promise的线程数(调用sync()和await()进行等待的线程数量)
 
     /**
      * Threading - synchronized(this). We must prevent concurrent notification and FIFO listener notification if the
      * executor changes.
      */
-    private boolean notifyingListeners;
+    private boolean notifyingListeners; // 是否正在唤醒等待线程 用于防止重复执行唤醒 不然会重复执行listeners的回调方法
 
     /**
      * Creates a new instance.
@@ -402,7 +402,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     @Override
     public Promise<V> sync() throws InterruptedException {
         await();
-        rethrowIfFailed();
+        this.rethrowIfFailed(); // 如果任务是失败的 重新抛出响应的异常
         return this;
     }
 
@@ -609,11 +609,11 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         return setValue0(new CauseHolder(checkNotNull(cause, "cause")));
     }
 
-    private boolean setValue0(Object objResult) {
+    private boolean setValue0(Object objResult) { // 设置好值然后执行监听者的回调方法
         if (RESULT_UPDATER.compareAndSet(this, null, objResult) ||
             RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) {
             if (checkNotifyWaiters()) {
-                notifyListeners();
+                this.notifyListeners(); // 执行监听者的回调方法
             }
             return true;
         }
