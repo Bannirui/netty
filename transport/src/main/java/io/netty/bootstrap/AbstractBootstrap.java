@@ -307,8 +307,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
-            channel = channelFactory.newChannel(); // 调用相应Channel的无参构造方法
-            init(channel);
+            channel = channelFactory.newChannel(); // 调用相应Channel的无参构造方法 构造channel实例 同时会构造pipeline实例 此时pipeline中只有head和tail两个handler
+            this.init(channel); // 对channel中持有的pipeline中handler的添加
         } catch (Throwable t) {
             if (channel != null) {
                 // channel can be null if newChannel crashed (eg SocketException("too many open files"))
