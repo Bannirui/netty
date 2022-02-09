@@ -152,14 +152,14 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
      * @see #connect()
      */
     private ChannelFuture doResolveAndConnect(final SocketAddress remoteAddress, final SocketAddress localAddress) {
-        final ChannelFuture regFuture = this.initAndRegister();
+        final ChannelFuture regFuture = this.initAndRegister(); // 完成了channel的register操作
         final Channel channel = regFuture.channel();
 
         if (regFuture.isDone()) {
             if (!regFuture.isSuccess()) {
                 return regFuture;
             }
-            return doResolveAndConnect0(channel, remoteAddress, localAddress, channel.newPromise());
+            return this.doResolveAndConnect0(channel, remoteAddress, localAddress, channel.newPromise());
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
@@ -237,8 +237,7 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
         return promise;
     }
 
-    private static void doConnect(
-            final SocketAddress remoteAddress, final SocketAddress localAddress, final ChannelPromise connectPromise) {
+    private static void doConnect(final SocketAddress remoteAddress, final SocketAddress localAddress, final ChannelPromise connectPromise) {
 
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.

@@ -503,7 +503,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeBind(SocketAddress localAddress, ChannelPromise promise) {
         if (invokeHandler()) {
             try {
-                ((ChannelOutboundHandler) handler()).bind(this, localAddress, promise);
+                ((ChannelOutboundHandler) handler()).bind(this, localAddress, promise); // (ChannelOutboundHandler) handler()返回的是pipeline中Outbound类型的handler(HandlerContext)
             } catch (Throwable t) {
                 notifyOutboundHandlerException(t, promise);
             }
@@ -514,12 +514,11 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) {
-        return connect(remoteAddress, null, promise);
+        return this.connect(remoteAddress, null, promise);
     }
 
     @Override
-    public ChannelFuture connect(
-            final SocketAddress remoteAddress, final SocketAddress localAddress, final ChannelPromise promise) {
+    public ChannelFuture connect(final SocketAddress remoteAddress, final SocketAddress localAddress, final ChannelPromise promise) {
         ObjectUtil.checkNotNull(remoteAddress, "remoteAddress");
 
         if (isNotValidPromise(promise, false)) {
@@ -545,7 +544,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeConnect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
         if (invokeHandler()) {
             try {
-                ((ChannelOutboundHandler) handler()).connect(this, remoteAddress, localAddress, promise);
+                ((ChannelOutboundHandler) handler()).connect(this, remoteAddress, localAddress, promise); // (ChannelOutboundHandler) handler()返回的就是pipeline双链表中的Outbound类型的handler节点
             } catch (Throwable t) {
                 notifyOutboundHandlerException(t, promise);
             }

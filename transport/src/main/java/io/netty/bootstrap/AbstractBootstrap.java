@@ -269,7 +269,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
-        final ChannelFuture regFuture = this.initAndRegister();
+        final ChannelFuture regFuture = this.initAndRegister(); // 完成了channel的register操作
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
             return regFuture;
@@ -304,7 +304,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
     }
 
-    final ChannelFuture initAndRegister() {
+    final ChannelFuture initAndRegister() { // 完成了channel的register操作
         Channel channel = null;
         try {
             channel = channelFactory.newChannel(); // 调用相应Channel的无参构造方法 构造channel实例 同时会构造pipeline实例 此时pipeline中只有head和tail两个handler

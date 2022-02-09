@@ -963,12 +963,12 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
-        return tail.bind(localAddress, promise);
+        return tail.bind(localAddress, promise); // bind是交给pipeline来执行的 bind属于Outbound类型的操作 从pipeline的tail开始
     }
 
     @Override
     public final ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) {
-        return tail.connect(remoteAddress, promise);
+        return tail.connect(remoteAddress, promise); // connect是交给pipeline来执行的 connect属于Outbound类型的操作 从pipeline的tail开始 register操作数据Inbound类型操作 从head开始
     }
 
     @Override

@@ -597,14 +597,14 @@ abstract class AbstractEpollChannel extends AbstractChannel implements UnixChann
                 }
 
                 boolean wasActive = isActive();
-                if (doConnect(remoteAddress, localAddress)) {
-                    fulfillConnectPromise(promise, wasActive);
+                if (doConnect(remoteAddress, localAddress)) { // jdk底层进行连接
+                    fulfillConnectPromise(promise, wasActive); // 连接成功的处理逻辑
                 } else {
                     connectPromise = promise;
                     requestedRemoteAddress = remoteAddress;
 
                     // Schedule connect timeout.
-                    int connectTimeoutMillis = config().getConnectTimeoutMillis();
+                    int connectTimeoutMillis = config().getConnectTimeoutMillis(); // 之下逻辑处理连接超时的情况 用到了NioEventLoop的定时任务功能
                     if (connectTimeoutMillis > 0) {
                         connectTimeoutFuture = eventLoop().schedule(new Runnable() {
                             @Override
@@ -733,7 +733,7 @@ abstract class AbstractEpollChannel extends AbstractChannel implements UnixChann
     /**
      * Connect to the remote peer
      */
-    protected boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddress) throws Exception {
+    protected boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddress) throws Exception { // jdk底层的socketChannel的connect操作 然后设置interestOps为SelectionKey.OP_CONNECT 返回值代表已经连接成功
         if (localAddress instanceof InetSocketAddress) {
             checkResolvable((InetSocketAddress) localAddress);
         }
