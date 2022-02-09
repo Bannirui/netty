@@ -27,11 +27,7 @@ import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.io.IOException;
-import java.net.ConnectException;
-import java.net.InetSocketAddress;
-import java.net.NoRouteToHostException;
-import java.net.SocketAddress;
-import java.net.SocketException;
+import java.net.*;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.NotYetConnectedException;
 import java.util.concurrent.Executor;
@@ -482,11 +478,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     eventLoop.execute(new Runnable() { // 到这里为止 NioEventLoop中的Thread实例还没有创建 Channel实例register到了NioEventLoopGroup线程池中的某个NioEventLoop实例 后续该channel的所有操作都由这个NioEventLoop实例完成 register操作提交到eventLoop之后 直接返回promise实例 剩下的register0()操作属于异步操作
                         @Override
                         public void run() {
-                            register0(promise);
+                            AbstractUnsafe.this.register0(promise);
                         }
                     });
                 } catch (Throwable t) {
-                    logger.warn("Force-closing a channel whose registration task was not accepted by an event loop: {}", AbstractChannel.this, t);
                     closeForcibly();
                     closeFuture.setClosed();
                     safeSetFailure(promise, t);
@@ -502,27 +497,27 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
-                doRegister();
+                AbstractChannel.this.doRegister(); // jdk底层操作 将channel注册到selector上
                 neverRegistered = false;
                 registered = true;
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
-                pipeline.invokeHandlerAddedIfNeeded();
+                pipeline.invokeHandlerAddedIfNeeded(); // 涉及到ChannelInitializer::init()方法将ChannelInitializer内部添加的handlers添加到pipeline中
 
-                safeSetSuccess(promise);
-                pipeline.fireChannelRegistered();
+                safeSetSuccess(promise); // 设置当前promise状态为success 当前register()方法是在eventLoop中的线程中执行的 需要通知提交register操作的那个线程
+                pipeline.fireChannelRegistered(); // 当前的register操作已经成功 该事件应该被pipeline上所有关心register事件的handler感知 往pipeline中扔一个事件
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
-                if (isActive()) {
-                    if (firstRegistration) {
+                if (isActive()) { // active指channel已经打开
+                    if (firstRegistration) { // 如果该channel是第一次执行register 那么往pipeline中丢一个fireChannelActive事件
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
                         // This channel was registered before and autoRead() is set. This means we need to begin read
                         // again so that we process inbound data.
                         //
                         // See https://github.com/netty/netty/issues/4805
-                        beginRead();
+                        beginRead(); // 该channel已经register过了 让该channel立马去监听通道中的OP_READ事件
                     }
                 }
             } catch (Throwable t) {

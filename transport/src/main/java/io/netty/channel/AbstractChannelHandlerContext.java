@@ -142,12 +142,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelHandlerContext fireChannelRegistered() {
-        invokeChannelRegistered(findContextInbound(MASK_CHANNEL_REGISTERED));
+        invokeChannelRegistered(this.findContextInbound(MASK_CHANNEL_REGISTERED)); // findContextInbound()方法会沿着pipeline找到下一个Inbound事件类型的handler
         return this;
     }
 
     static void invokeChannelRegistered(final AbstractChannelHandlerContext next) {
-        EventExecutor executor = next.executor();
+        EventExecutor executor = next.executor(); // next从head开始 执行head的invokeChannelRegistered()方法
         if (executor.inEventLoop()) {
             next.invokeChannelRegistered();
         } else {
@@ -163,7 +163,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeChannelRegistered() {
         if (invokeHandler()) {
             try {
-                ((ChannelInboundHandler) handler()).channelRegistered(this);
+                ((ChannelInboundHandler) handler()).channelRegistered(this); // (ChannelInboundHandler) handler()返回的是HandlerContext
             } catch (Throwable t) {
                 invokeExceptionCaught(t);
             }

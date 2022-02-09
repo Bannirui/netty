@@ -614,19 +614,12 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 ctx.callHandlerRemoved();
                 removed = true;
             } catch (Throwable t2) {
-                if (logger.isWarnEnabled()) {
-                    logger.warn("Failed to remove a handler: " + ctx.name(), t2);
-                }
             }
 
             if (removed) {
-                fireExceptionCaught(new ChannelPipelineException(
-                        ctx.handler().getClass().getName() +
-                        ".handlerAdded() has thrown an exception; removed.", t));
+                fireExceptionCaught(new ChannelPipelineException(ctx.handler().getClass().getName() + ".handlerAdded() has thrown an exception; removed.", t));
             } else {
-                fireExceptionCaught(new ChannelPipelineException(
-                        ctx.handler().getClass().getName() +
-                        ".handlerAdded() has thrown an exception; also failed to remove.", t));
+                fireExceptionCaught(new ChannelPipelineException(ctx.handler().getClass().getName() + ".handlerAdded() has thrown an exception; also failed to remove.", t));
             }
         }
     }
@@ -812,7 +805,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline fireChannelRegistered() {
-        AbstractChannelHandlerContext.invokeChannelRegistered(head);
+        AbstractChannelHandlerContext.invokeChannelRegistered(head); // 参数为pipeline中的head节点
         return this;
     }
 
@@ -1380,7 +1373,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         @Override
         public void channelRegistered(ChannelHandlerContext ctx) {
             invokeHandlerAddedIfNeeded();
-            ctx.fireChannelRegistered();
+            ctx.fireChannelRegistered(); // 向后传播事件
         }
 
         @Override
@@ -1465,11 +1458,6 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 try {
                     executor.execute(this);
                 } catch (RejectedExecutionException e) {
-                    if (logger.isWarnEnabled()) {
-                        logger.warn(
-                                "Can't invoke handlerAdded() as the EventExecutor {} rejected it, removing handler {}.",
-                                executor, ctx.name(), e);
-                    }
                     atomicRemoveFromHandlerList(ctx);
                     ctx.setRemoved();
                 }

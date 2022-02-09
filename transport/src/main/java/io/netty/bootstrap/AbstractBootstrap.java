@@ -321,7 +321,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
 
         ChannelFuture regFuture = this.config().group().register(channel); // 至此在register()方法之前 channel已经实例化 设置了非阻塞 实例化了Unsafe 实例化了pipeline 同时往pipeline中添加了head和tail以及一个ChannelInitializer实例 config().group()返回的是NioEventLoopGroup实例 调用register()方法
-        if (regFuture.cause() != null) {
+        if (regFuture.cause() != null) { // 在register过程中发生异常
             if (channel.isRegistered()) {
                 channel.close();
             } else {
@@ -338,7 +338,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         //         because bind() or connect() will be executed *after* the scheduled registration task is executed
         //         because register(), bind(), and connect() are all bound to the same thread.
 
-        return regFuture;
+        return regFuture; // 执行到这 说明后续可以进行NioSocketChannel::connect()方法或者NioServerSocketChannel::bind()方法 两种情况 1 register动作是在eventLoop中发起 那么到这里的时候 register一定已经完成了 2 如果register任务已经提交到eventLoop中 也就是进到了eventLoop中的taskQueue中 由于后续的connect和bind方法也会进入到同一个eventLoop的taskQueue中 所以一定会先执行register成功 在执行connect和bind方法
     }
 
     abstract void init(Channel channel) throws Exception;
