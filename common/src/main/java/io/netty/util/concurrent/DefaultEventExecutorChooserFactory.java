@@ -33,13 +33,13 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
     @Override
     public EventExecutorChooser newChooser(EventExecutor[] executors) {
         if (isPowerOfTwo(executors.length)) {
-            return new PowerOfTwoEventExecutorChooser(executors);
+            return new PowerOfTwoEventExecutorChooser(executors); // 线程池的线程数量是2的幂次方采用的选择策略
         } else {
-            return new GenericEventExecutorChooser(executors);
+            return new GenericEventExecutorChooser(executors); // 线程池的线程数量不是2的幂次方采用的选择策略
         }
     }
 
-    private static boolean isPowerOfTwo(int val) {
+    private static boolean isPowerOfTwo(int val) { // 判断是否是2的幂次方
         return (val & -val) == val;
     }
 
@@ -52,7 +52,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         }
 
         @Override
-        public EventExecutor next() {
+        public EventExecutor next() { // 线程池线程数是2的幂次方 位运算
             return executors[idx.getAndIncrement() & executors.length - 1];
         }
     }
@@ -69,7 +69,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         }
 
         @Override
-        public EventExecutor next() {
+        public EventExecutor next() { // 线程池线程数量不是2的幂次方 采用取模方式
             return executors[(int) Math.abs(idx.getAndIncrement() % executors.length)];
         }
     }

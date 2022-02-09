@@ -15,8 +15,6 @@
  */
 package io.netty.util.concurrent;
 
-import static io.netty.util.internal.ObjectUtil.checkPositive;
-
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -25,6 +23,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static io.netty.util.internal.ObjectUtil.checkPositive;
 
 /**
  * Abstract base class for {@link EventExecutorGroup} implementations that handles their tasks with multiple threads at
@@ -68,27 +68,26 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      * @param chooserFactory    the {@link EventExecutorChooserFactory} to use.
      * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
      */
-    protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
-                                            EventExecutorChooserFactory chooserFactory, Object... args) {
+    protected MultithreadEventExecutorGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory, Object... args) {
         checkPositive(nThreads, "nThreads");
 
         if (executor == null) {
-            executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
+            executor = new ThreadPerTaskExecutor(newDefaultThreadFactory()); // 构造一个executor 这个线程池不是给NioEventLoopGroup使用的 而是给NioEventLoop使用的 每来一个任务就新建一个线程
         }
 
-        children = new EventExecutor[nThreads];
+        children = new EventExecutor[nThreads]; //children数组 线程池中的线程数组
 
-        for (int i = 0; i < nThreads; i ++) {
+        for (int i = 0; i < nThreads; i ++) { // 实例化children数组中的每一个元素
             boolean success = false;
             try {
-                children[i] = newChild(executor, args);
+                children[i] = this.newChild(executor, args); // 实例化
                 success = true;
             } catch (Exception e) {
                 // TODO: Think about if this is a good exception type
                 throw new IllegalStateException("failed to create a child event loop", e);
             } finally {
                 if (!success) {
-                    for (int j = 0; j < i; j ++) {
+                    for (int j = 0; j < i; j ++) { // 但凡有一个child实例化失败 就把已经成功实例化的线程进行shutdown shutdown是异步操作
                         children[j].shutdownGracefully();
                     }
 
@@ -100,7 +99,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                             }
                         } catch (InterruptedException interrupted) {
                             // Let the caller handle the interruption.
-                            Thread.currentThread().interrupt();
+                            Thread.currentThread().interrupt(); // 把中断状态设置回去 交给关心的线程来处理
                             break;
                         }
                     }
@@ -108,9 +107,9 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
-        chooser = chooserFactory.newChooser(children);
+        chooser = chooserFactory.newChooser(children); // 线程选择策略
 
-        final FutureListener<Object> terminationListener = new FutureListener<Object>() {
+        final FutureListener<Object> terminationListener = new FutureListener<Object>() { // 设置一个listener用来监听线程池中的termination事件 给线程池中的每一个线程都设置这个listener 当监听到所有线程都terminate以后 这个线程池就算真正的terminate了
             @Override
             public void operationComplete(Future<Object> future) throws Exception {
                 if (terminatedChildren.incrementAndGet() == children.length) {
@@ -125,7 +124,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
 
         Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
         Collections.addAll(childrenSet, children);
-        readonlyChildren = Collections.unmodifiableSet(childrenSet);
+        readonlyChildren = Collections.unmodifiableSet(childrenSet); // 只读集合
     }
 
     protected ThreadFactory newDefaultThreadFactory() {

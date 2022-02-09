@@ -54,14 +54,13 @@ import java.util.concurrent.atomic.AtomicLong;
  * {@link Selector} and so does the multi-plexing of these in the event loop.
  *
  */
-public final class NioEventLoop extends SingleThreadEventLoop {
+public final class NioEventLoop extends SingleThreadEventLoop { // netty线程池中的单个线程指的就是NioEventLoop实例
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(NioEventLoop.class);
 
     private static final int CLEANUP_INTERVAL = 256; // XXX Hard-coded value, but won't need customization.
 
-    private static final boolean DISABLE_KEY_SET_OPTIMIZATION =
-            SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);
+    private static final boolean DISABLE_KEY_SET_OPTIMIZATION = SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);
 
     private static final int MIN_PREMATURE_SELECTOR_RETURNS = 3;
     private static final int SELECTOR_AUTO_REBUILD_THRESHOLD;
@@ -111,11 +110,11 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     /**
      * The NIO {@link Selector}.
      */
-    private Selector selector;
+    private Selector selector; // 线程池中每一个线程都有一个selector
     private Selector unwrappedSelector;
     private SelectedSelectionKeySet selectedKeys;
 
-    private final SelectorProvider provider;
+    private final SelectorProvider provider; // NioEventLoopGroup::newChild传进来的 一个线程池有一个selectorProvider 用于创建selector实例
 
     private static final long AWAKE = -1L;
     private static final long NONE = Long.MAX_VALUE;
@@ -126,20 +125,28 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     //    other value T    when EL is waiting with wakeup scheduled at time T
     private final AtomicLong nextWakeupNanos = new AtomicLong(AWAKE);
 
-    private final SelectStrategy selectStrategy;
+    private final SelectStrategy selectStrategy; // select操作的策略
 
-    private volatile int ioRatio = 50;
+    private volatile int ioRatio = 50; // IO任务的执行事件比例 每个线程既有IO任务执行 又有非IO任务执行 该参数为了保证有足够的时间给IO
     private int cancelledKeys;
     private boolean needsToSelectAgain;
 
-    NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selectorProvider,
-                 SelectStrategy strategy, RejectedExecutionHandler rejectedExecutionHandler,
-                 EventLoopTaskQueueFactory taskQueueFactory, EventLoopTaskQueueFactory tailTaskQueueFactory) {
-        super(parent, executor, false, newTaskQueue(taskQueueFactory), newTaskQueue(tailTaskQueueFactory),
-                rejectedExecutionHandler);
+    NioEventLoop(NioEventLoopGroup parent, // 线程池NioEventLoopGroup是池中线程NioEventLoop的parent
+                 Executor executor,
+                 SelectorProvider selectorProvider,
+                 SelectStrategy strategy,
+                 RejectedExecutionHandler rejectedExecutionHandler,
+                 EventLoopTaskQueueFactory taskQueueFactory,
+                 EventLoopTaskQueueFactory tailTaskQueueFactory) {
+        super(parent,
+                executor,
+                false,
+                newTaskQueue(taskQueueFactory),
+                newTaskQueue(tailTaskQueueFactory),
+                rejectedExecutionHandler); // 调用父类构造方法
         this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider");
         this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
-        final SelectorTuple selectorTuple = openSelector();
+        final SelectorTuple selectorTuple = this.openSelector(); // 开启NIO中的组件 selector 意味着NioEventLoopGroup这个线程池中每个线程NioEventLoop都有自己的selector
         this.selector = selectorTuple.selector;
         this.unwrappedSelector = selectorTuple.unwrappedSelector;
     }

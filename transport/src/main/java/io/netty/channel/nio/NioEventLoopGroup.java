@@ -35,7 +35,7 @@ import java.util.concurrent.ThreadFactory;
 /**
  * {@link MultithreadEventLoopGroup} implementations which is used for NIO {@link Selector} based {@link Channel}s.
  */
-public class NioEventLoopGroup extends MultithreadEventLoopGroup {
+public class NioEventLoopGroup extends MultithreadEventLoopGroup { // netty的线程池指的就是NioEventLoopGroup的实例 创建线程池NioEventLoopGroup会实例化池中所有的NioEventLoop实例(指定线程数量或者cpu*2) 但是并没有真正创建NioEventLoop中真实的线程Thread实例 Thread实例的创建时机是在第一个任务提交过来的时候 channel的register操作就是第一个任务
 
     /**
      * Create a new instance using the default number of threads, the default {@link ThreadFactory} and
@@ -77,8 +77,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
      * Create a new instance using the specified number of threads, the given {@link ThreadFactory} and the given
      * {@link SelectorProvider}.
      */
-    public NioEventLoopGroup(
-            int nThreads, ThreadFactory threadFactory, final SelectorProvider selectorProvider) {
+    public NioEventLoopGroup(int nThreads, ThreadFactory threadFactory, final SelectorProvider selectorProvider) {
         this(nThreads, threadFactory, selectorProvider, DefaultSelectStrategyFactory.INSTANCE);
     }
 
@@ -87,21 +86,18 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
         super(nThreads, threadFactory, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());
     }
 
-    public NioEventLoopGroup(
-            int nThreads, Executor executor, final SelectorProvider selectorProvider) {
+    public NioEventLoopGroup(int nThreads, Executor executor, final SelectorProvider selectorProvider) {
         this(nThreads, executor, selectorProvider, DefaultSelectStrategyFactory.INSTANCE);
     }
 
-    public NioEventLoopGroup(int nThreads, Executor executor, final SelectorProvider selectorProvider,
-                             final SelectStrategyFactory selectStrategyFactory) {
+    public NioEventLoopGroup(int nThreads, Executor executor, final SelectorProvider selectorProvider, final SelectStrategyFactory selectStrategyFactory) {
         super(nThreads, executor, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());
     }
 
     public NioEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory,
                              final SelectorProvider selectorProvider,
                              final SelectStrategyFactory selectStrategyFactory) {
-        super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory,
-                RejectedExecutionHandlers.reject());
+        super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());
     }
 
     public NioEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory,
@@ -116,8 +112,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
                              final SelectStrategyFactory selectStrategyFactory,
                              final RejectedExecutionHandler rejectedExecutionHandler,
                              final EventLoopTaskQueueFactory taskQueueFactory) {
-        super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory,
-                rejectedExecutionHandler, taskQueueFactory);
+        super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory, rejectedExecutionHandler, taskQueueFactory);
     }
 
     /**
@@ -134,14 +129,16 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
      *                             {@link SingleThreadEventLoop#executeAfterEventLoopIteration(Runnable)},
      *                             or {@code null} if default one should be used.
      */
-    public NioEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory,
-                             SelectorProvider selectorProvider,
-                             SelectStrategyFactory selectStrategyFactory,
-                             RejectedExecutionHandler rejectedExecutionHandler,
+    public NioEventLoopGroup(int nThreads, // 线程池中的线程数 就是NioEventLoop的实例数量
+                             Executor executor, // 本身就要构造一个线程池Executor 现在又传进来一个executor实例 这个实例不是给线程池使用的 而是给NioEventLoop使用的
+                             EventExecutorChooserFactory chooserFactory, // 当提交一个任务到线程池的时候 线程池需要选择其中的一个线程执行这个任务 chooserFactory就是实现选择策略的
+                             SelectorProvider selectorProvider, // SelectorProvider.provider() 通过selectorProvider实例化jdk的Selector 每个线程池都持有一个selectorProvider实例
+                             SelectStrategyFactory selectStrategyFactory, // DefaultSelectStrategyFactory.INSTANCE 涉及到线程在做select操作和执行任务过程中的策略选择问题
+                             RejectedExecutionHandler rejectedExecutionHandler, // RejectedExecutionHandlers.reject() Netty选择的默认拒绝策略是抛出异常 线程池中没有可用线程时执行任务的情况时使用 这个是给NioEventLoop使用的
                              EventLoopTaskQueueFactory taskQueueFactory,
-                             EventLoopTaskQueueFactory tailTaskQueueFactory) {
-        super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory,
-                rejectedExecutionHandler, taskQueueFactory, tailTaskQueueFactory);
+                             EventLoopTaskQueueFactory tailTaskQueueFactory
+    ) { // 参数最全的构造方法
+        super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory, rejectedExecutionHandler, taskQueueFactory, tailTaskQueueFactory); // 调用父类构造方法
     }
 
     /**
@@ -179,8 +176,12 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
         if (argsLength > 4) {
             tailTaskQueueFactory = (EventLoopTaskQueueFactory) args[4];
         }
-        return new NioEventLoop(this, executor, selectorProvider,
+        return new NioEventLoop(this, // this是NioEventLoopGroup实例 在构造NioEventLoop的时候将线程是实例传给parent属性
+                executor,
+                selectorProvider,
                 selectStrategyFactory.newSelectStrategy(),
-                rejectedExecutionHandler, taskQueueFactory, tailTaskQueueFactory);
+                rejectedExecutionHandler,
+                taskQueueFactory,
+                tailTaskQueueFactory); // NioEventLoop就是NioEventLoopGroup这个线程池中的个体 相当于线程池中的线程 在每个NioEventLoop实例内部都持有一个自己Thread实例
     }
 }

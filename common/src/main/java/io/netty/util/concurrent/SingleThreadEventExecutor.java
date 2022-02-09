@@ -163,13 +163,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     protected SingleThreadEventExecutor(EventExecutorGroup parent, Executor executor,
                                         boolean addTaskWakesUp, Queue<Runnable> taskQueue,
-                                        RejectedExecutionHandler rejectedHandler) {
-        super(parent);
+                                        RejectedExecutionHandler rejectedHandler) { // 所以本质上每个线程也是一个线程池(单线程线程池)
+        super(parent); // 设置parent 也就是NioEventLoopGroup实例
         this.addTaskWakesUp = addTaskWakesUp;
         this.maxPendingTasks = DEFAULT_MAX_PENDING_EXECUTOR_TASKS;
-        this.executor = ThreadExecutorMap.apply(executor, this);
-        this.taskQueue = ObjectUtil.checkNotNull(taskQueue, "taskQueue");
-        this.rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler");
+        this.executor = ThreadExecutorMap.apply(executor, this); // ThreadPerTaskExecutor实例 不是给NioEventLoopGroup线程池使用的 而是给里面的线程NioEventLoop使用的 作用是开启NioEventLoop实例中的线程(真正的线程Thread)
+        this.taskQueue = ObjectUtil.checkNotNull(taskQueue, "taskQueue"); // 提交给NioEventLoop的任务都会进入到这个taskQueue中等待被执行 这个taskQueue容量默认值16 任务队列 NioEventLoop需要负责IO事件和非IO事件 通常它都是在执行selector::select方法或者正在处理selectedKeys 如果要submit一个任务给它 任务就会被放到taskQueue中 等它来轮询 该队列是线程安全的LinkedBlockingQueue
+        this.rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler"); // 任务队列taskQueue的默认容量是16 如果submit的任务堆积到了16 再往里面提交任务就会触发拒绝策略的执行
     }
 
     /**
