@@ -19,6 +19,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.util.CharsetUtil;
 
 /**
  * Handler implementation for the echo client.  It initiates the ping-pong
@@ -27,37 +28,49 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
  */
 public class EchoClientHandler extends ChannelInboundHandlerAdapter {
 
-    private final ByteBuf firstMessage;
-
     /**
-     * Creates a client-side handler.
+     * @author dingrui
+     * @since 2022/2/9
+     * @param ctx:
+     * @return void
+     * @description 客户端连接服务器后
      */
-    public EchoClientHandler() {
-        firstMessage = Unpooled.buffer(EchoClient.SIZE);
-        for (int i = 0; i < firstMessage.capacity(); i ++) {
-            firstMessage.writeByte((byte) i);
-        }
-    }
-
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
-        ctx.writeAndFlush(firstMessage);
+        System.out.println("客户端连接服务端成功");
+        // 数据写到channel
+        ctx.writeAndFlush(Unpooled.copiedBuffer("hello, this is client", CharsetUtil.UTF_8));
     }
 
+    /**
+     * @author dingrui
+     * @since 2022/2/9
+     * @param ctx:
+     * @param msg:
+     * @return void
+     * @description 接收数据后
+     */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        ctx.write(msg);
+        System.out.println("客户端收到数据 msg=" + ((ByteBuf) msg).toString(CharsetUtil.UTF_8));
     }
 
+    /**
+     * @author dingrui
+     * @since 2022/2/9
+     * @param ctx:
+     * @return void
+     * @description 完成后
+     */
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) {
-       ctx.flush();
+        ctx.flush();
     }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         // Close the connection when an exception is raised.
-        cause.printStackTrace();
+        System.out.println("客户端异常 ex=" + cause.getMessage());
         ctx.close();
     }
 }
