@@ -444,8 +444,8 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
         for (;;) {
             try {
                 int strategy;
-                try {
-                    strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
+                try { // selectNowSupplier是个匿名类 实现了IntSupplier接口 该接口只有一个get()方法 调用到当前类NioEventLoop中的selectNow()方法
+                    strategy = selectStrategy.calculateStrategy(this.selectNowSupplier, hasTasks()); // selectStrategy有两个值 一个是CONTINUE 一个是SELECT 根据是否有任务在排队决定是否可以进行阻塞 如果taskQueue不为空 也就是hasTasks()返回true 执行一次selectNow() 该方法不会阻塞 如果hashTask()返回false 那么执行SelectStrategy.SELECT分支 进行select() 该方法阻塞
                     switch (strategy) {
                     case SelectStrategy.CONTINUE:
                         continue;
@@ -453,7 +453,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                     case SelectStrategy.BUSY_WAIT:
                         // fall-through to SELECT since the busy-wait is not supported with NIO
 
-                    case SelectStrategy.SELECT:
+                    case SelectStrategy.SELECT: // 任务队列中没有任务
                         long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
                         if (curDeadlineNanos == -1L) {
                             curDeadlineNanos = NONE; // nothing on the calendar
@@ -461,7 +461,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                         nextWakeupNanos.set(curDeadlineNanos);
                         try {
                             if (!hasTasks()) {
-                                strategy = select(curDeadlineNanos);
+                                strategy = this.select(curDeadlineNanos); // select()方法阻塞
                             }
                         } finally {
                             // This update is just to help block unnecessary selector wakeups
@@ -483,9 +483,9 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                 selectCnt++;
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
-                final int ioRatio = this.ioRatio;
+                final int ioRatio = this.ioRatio; // 默认值是50
                 boolean ranTasks;
-                if (ioRatio == 100) {
+                if (ioRatio == 100) { // 100->先执行IO操作 然后在finally代码块中执行taskQueue中的任务
                     try {
                         if (strategy > 0) {
                             processSelectedKeys();
@@ -494,13 +494,13 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                         // Ensure we always run tasks.
                         ranTasks = runAllTasks();
                     }
-                } else if (strategy > 0) {
+                } else if (strategy > 0) { // 不是100 根据IO操作耗时 限制非IO操作耗时
                     final long ioStartTime = System.nanoTime();
                     try {
-                        processSelectedKeys();
+                        processSelectedKeys(); // 执行IO操作
                     } finally {
                         // Ensure we always run tasks.
-                        final long ioTime = System.nanoTime() - ioStartTime;
+                        final long ioTime = System.nanoTime() - ioStartTime; // IO操作耗时
                         ranTasks = runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
                 } else {
@@ -508,20 +508,12 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                 }
 
                 if (ranTasks || strategy > 0) {
-                    if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS && logger.isDebugEnabled()) {
-                        logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",
-                                selectCnt - 1, selector);
-                    }
                     selectCnt = 0;
                 } else if (unexpectedSelectorWakeup(selectCnt)) { // Unexpected wakeup (unusual case)
                     selectCnt = 0;
                 }
             } catch (CancelledKeyException e) {
                 // Harmless exception - log anyway
-                if (logger.isDebugEnabled()) {
-                    logger.debug(CancelledKeyException.class.getSimpleName() + " raised by a Selector {} - JDK bug?",
-                            selector, e);
-                }
             } catch (Error e) {
                 throw e;
             } catch (Throwable t) {

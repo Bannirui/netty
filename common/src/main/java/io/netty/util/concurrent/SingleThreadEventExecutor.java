@@ -812,7 +812,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     @Override
     public void execute(Runnable task) {
         ObjectUtil.checkNotNull(task, "task");
-        execute(task, !(task instanceof LazyRunnable) && wakesUpForTask(task));
+        this.execute(task, !(task instanceof LazyRunnable) && wakesUpForTask(task));
     }
 
     @Override
@@ -821,10 +821,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     private void execute(Runnable task, boolean immediate) {
-        boolean inEventLoop = inEventLoop();
-        addTask(task);
+        boolean inEventLoop = super.inEventLoop(); // 判断添加任务的线程是否就是当前EventLoop中的线程
+        this.addTask(task); // 添加任务到taskQueue中 如果任务队列已经满了 就触发拒绝策略
         if (!inEventLoop) {
-            startThread();
+            this.startThread(); // 如果不是NioEventLoop内部的线程提交的任务 判断下线程是否已经启动 如果还没有启动就启动线程
             if (isShutdown()) {
                 boolean reject = false;
                 try {
@@ -936,12 +936,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private static final long SCHEDULE_PURGE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
 
-    private void startThread() {
+    private void startThread() { // 判断线程是否已经启动 决定是否要进行启动操作
         if (state == ST_NOT_STARTED) {
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
                 boolean success = false;
                 try {
-                    doStartThread();
+                    this.doStartThread(); // 启动线程
                     success = true;
                 } finally {
                     if (!success) {
@@ -972,10 +972,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void doStartThread() {
         assert thread == null;
-        executor.execute(new Runnable() {
+        executor.execute(new Runnable() { // 这个executor就是实例化NioEventLoop时候传进来的ThreadPerTaskExecutor实例 每次来一个任务创建一个线程 调用execute()方法就会创建一个新的线程 也就是真正的线程Thread实例
             @Override
             public void run() {
-                thread = Thread.currentThread();
+                thread = Thread.currentThread(); // 将executor线程池中创建的线程设置为NioEventLoop的线程
                 if (interrupted) {
                     thread.interrupt();
                 }
@@ -983,10 +983,9 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
-                    SingleThreadEventExecutor.this.run();
+                    SingleThreadEventExecutor.this.run(); // 执行run()方法 该方法为抽象方法 在NioEventLoop中有实现 这个方法不会轻易地结束 需要向jdk线程池的worker那样 不断地循环获取新的任务 不断做select操作和轮询taskQueue这个任务队列
                     success = true;
                 } catch (Throwable t) {
-                    logger.warn("Unexpected exception from an event executor: ", t);
                 } finally {
                     for (;;) {
                         int oldState = state;
@@ -998,11 +997,6 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
                     // Check if confirmShutdown() was called at the end of the loop.
                     if (success && gracefulShutdownStartTime == 0) {
-                        if (logger.isErrorEnabled()) {
-                            logger.error("Buggy " + EventExecutor.class.getSimpleName() + " implementation; " +
-                                    SingleThreadEventExecutor.class.getSimpleName() + ".confirmShutdown() must " +
-                                    "be called before run() implementation terminates.");
-                        }
                     }
 
                     try {
