@@ -469,27 +469,24 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
             if (!isCompatible(eventLoop)) {
-                promise.setFailure(
-                        new IllegalStateException("incompatible event loop type: " + eventLoop.getClass().getName()));
+                promise.setFailure(new IllegalStateException("incompatible event loop type: " + eventLoop.getClass().getName()));
                 return;
             }
 
-            AbstractChannel.this.eventLoop = eventLoop;
+            AbstractChannel.this.eventLoop = eventLoop; // 将eventLoop实例设置给channel 从此这个channel就拥有了eventLoop 后续该channel的所有异步操作都要提交给这个eventLoop来执行
 
             if (eventLoop.inEventLoop()) {
-                register0(promise);
+                this.register0(promise); // 如果发起register动作的线程就是eventLoop中的线程 那么直接调用register0()方法 这个条件分之存在的必要性是: 可以unregister() 再register()
             } else {
-                try {
-                    eventLoop.execute(new Runnable() {
+                try { // 提交任务给eventLoop eventLoop中的线程会负责调用register0()方法
+                    eventLoop.execute(new Runnable() { // 到这里为止 NioEventLoop中的Thread实例还没有创建 Channel实例register到了NioEventLoopGroup线程池中的某个NioEventLoop实例 后续该channel的所有操作都由这个NioEventLoop实例完成 register操作提交到eventLoop之后 直接返回promise实例 剩下的register0()操作属于异步操作
                         @Override
                         public void run() {
                             register0(promise);
                         }
                     });
                 } catch (Throwable t) {
-                    logger.warn(
-                            "Force-closing a channel whose registration task was not accepted by an event loop: {}",
-                            AbstractChannel.this, t);
+                    logger.warn("Force-closing a channel whose registration task was not accepted by an event loop: {}", AbstractChannel.this, t);
                     closeForcibly();
                     closeFuture.setClosed();
                     safeSetFailure(promise, t);

@@ -320,7 +320,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
-        ChannelFuture regFuture = config().group().register(channel);
+        ChannelFuture regFuture = this.config().group().register(channel); // 至此在register()方法之前 channel已经实例化 设置了非阻塞 实例化了Unsafe 实例化了pipeline 同时往pipeline中添加了head和tail以及一个ChannelInitializer实例 config().group()返回的是NioEventLoopGroup实例 调用register()方法
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
                 channel.close();
