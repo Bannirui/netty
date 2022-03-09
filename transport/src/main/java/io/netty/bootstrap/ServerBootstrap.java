@@ -79,12 +79,10 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
      * {@link EventLoopGroup}'s are used to handle all the events and IO for {@link ServerChannel} and
      * {@link Channel}'s.
      */
-    public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGroup) {
-        super.group(parentGroup);
-        if (this.childGroup != null) {
-            throw new IllegalStateException("childGroup set already");
-        }
-        this.childGroup = ObjectUtil.checkNotNull(childGroup, "childGroup");
+    public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGroup) { // 设置线程池
+        super.group(parentGroup); // boss线程池组交给父类
+        if (this.childGroup != null) throw new IllegalStateException("childGroup set already");
+        this.childGroup = ObjectUtil.checkNotNull(childGroup, "childGroup"); // worker线程池组初始化childGroup属性
         return this;
     }
 

@@ -107,7 +107,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      */
     public B channel(Class<? extends C> channelClass) { // 将ReflectiveChannelFactory的实例赋值给channelFactory属性
         return this.channelFactory(new ReflectiveChannelFactory<C>(
-                ObjectUtil.checkNotNull(channelClass, "channelClass")
+                ObjectUtil.checkNotNull(channelClass, "channelClass") // NioServerSocket的class对象
         ));
     }
 
@@ -121,7 +121,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             throw new IllegalStateException("channelFactory set already");
         }
 
-        this.channelFactory = channelFactory; // 设置channelFactory属性 将ReflectiveChannelFactory实例赋值给该属性
+        this.channelFactory = channelFactory; // 设置channelFactory属性 将ReflectiveChannelFactory实例赋值给该属性 在channelFactory中初始化了NioServerSocket的class对象
         return self();
     }
 
