@@ -103,6 +103,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         return (NioUnsafe) super.unsafe();
     }
 
+    /**
+     * <p>返回netty channel中组合的jdk的channel</p>
+     * <p>子类调用该类的构造方法{@link AbstractNioChannel#AbstractNioChannel(Channel, SelectableChannel, int)}绑定了netty和jdk的channel ch属性即被jdk的channel赋值了</p>
+     */
     protected SelectableChannel javaChannel() {
         return ch;
     }
@@ -376,6 +380,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         boolean selected = false;
         for (;;) {
             try {
+                /**
+                 * jdk底层的注册方法
+                 */
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this); // jdk中channel的register方法 将SocketChannel或者ServerSocketChannel注册到selector中 这里监听集合设置为0 也就是什么都不监听->后续有地方会需要修改这个selectionKey的监听集合
                 return;
             } catch (CancelledKeyException e) {

@@ -15,7 +15,9 @@
  */
 package io.netty.channel;
 
+import io.netty.bootstrap.AbstractBootstrap;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.channel.nio.AbstractNioMessageChannel;
 import io.netty.channel.socket.ChannelOutputShutdownEvent;
 import io.netty.channel.socket.ChannelOutputShutdownException;
 import io.netty.util.DefaultAttributeMap;
@@ -63,6 +65,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
      *
      * @param parent
      *        the parent of this channel. {@code null} if there's no parent.
+     */
+    /**
+     * <p><em>unsafe</em>属性赋值
+     * 方法调用链 {@link AbstractChannel#newUnsafe()}->{@link AbstractNioMessageChannel#newUnsafe()}-><pre>{@code  new NioMessageUnsafe()}</pre>->{@link io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe}实例</p>
      */
     protected AbstractChannel(Channel parent) {
         this.parent = parent;
@@ -469,15 +475,29 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
-            AbstractChannel.this.eventLoop = eventLoop; // 将eventLoop实例设置给channel 从此这个channel就拥有了eventLoop 后续该channel的所有异步操作都要提交给这个eventLoop来执行
+            /**
+             * 绑定eventLoop线程
+             * 将eventLoop实例设置给channel 从此这个channel就拥有了eventLoop 后续该channel的所有异步操作都要提交给这个eventLoop来执行
+             *
+             * IO的本质就是数据在IO设备和内存之间的复制 所有的复制操作都交给EventLoop处理
+             */
+            AbstractChannel.this.eventLoop = eventLoop;
 
+            /**
+             * <p>条件分支的判断是为了区别当前线程是不是eventLoop线程 比如从main线程跟着{@link AbstractBootstrap#bind(int)}方法过来 main线程不是eventLoop就进{@code else}分支</p>
+             */
             if (eventLoop.inEventLoop()) {
                 this.register0(promise); // 如果发起register动作的线程就是eventLoop中的线程 那么直接调用register0()方法 这个条件分之存在的必要性是: 可以unregister() 再register()
             } else {
-                try { // 提交任务给eventLoop eventLoop中的线程会负责调用register0()方法
+                try {
+                    /**
+                     * <p>{@code eventLoop.execute(...)}说明了eventLoop本质就是一个线程池 开启一个eventLoop线程 {@code AbstractUnsafe.this.register0(promise)}就是在开启线程之后 通过eventLoop线程执行 也就是{@code if}分支中的代码逻辑</p>
+                     * 提交任务给eventLoop eventLoop中的线程会负责调用register0()方法
+                     */
                     eventLoop.execute(new Runnable() { // 到这里为止 NioEventLoop中的Thread实例还没有创建 Channel实例register到了NioEventLoopGroup线程池中的某个NioEventLoop实例 后续该channel的所有操作都由这个NioEventLoop实例完成 register操作提交到eventLoop之后 直接返回promise实例 剩下的register0()操作属于异步操作
                         @Override
                         public void run() {
+                            // 实际的注册
                             AbstractUnsafe.this.register0(promise);
                         }
                     });
@@ -493,24 +513,34 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             try {
                 // check if the channel is still open as it could be closed in the mean time when the register
                 // call was outside of the eventLoop
-                if (!promise.setUncancellable() || !ensureOpen(promise)) {
-                    return;
-                }
+                if (!promise.setUncancellable() || !ensureOpen(promise)) return;
                 boolean firstRegistration = neverRegistered;
+                /**
+                 * 实际的注册
+                 */
                 AbstractChannel.this.doRegister(); // jdk底层操作 将channel注册到selector上
                 neverRegistered = false;
                 registered = true;
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
+                /**
+                 * 触发事件
+                 */
                 pipeline.invokeHandlerAddedIfNeeded(); // 涉及到ChannelInitializer::init()方法将ChannelInitializer内部添加的handlers添加到pipeline中
 
                 safeSetSuccess(promise); // 设置当前promise状态为success 当前register()方法是在eventLoop中的线程中执行的 需要通知提交register操作的那个线程
+                /**
+                 * 触发注册成功事件
+                 */
                 pipeline.fireChannelRegistered(); // 当前的register操作已经成功 该事件应该被pipeline上所有关心register事件的handler感知 往pipeline中扔一个事件
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
                 if (isActive()) { // active指channel已经打开
                     if (firstRegistration) { // 如果该channel是第一次执行register 那么往pipeline中丢一个fireChannelActive事件
+                        /**
+                         * 传播active事件
+                         */
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
                         // This channel was registered before and autoRead() is set. This means we need to begin read

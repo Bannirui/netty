@@ -16,16 +16,7 @@
 
 package io.netty.bootstrap;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPromise;
-import io.netty.channel.DefaultChannelPromise;
-import io.netty.channel.EventLoop;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.ReflectiveChannelFactory;
+import io.netty.channel.*;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.GlobalEventExecutor;
@@ -88,10 +79,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      */
     public B group(EventLoopGroup group) {
         ObjectUtil.checkNotNull(group, "group");
-        if (this.group != null) {
-            throw new IllegalStateException("group set already");
-        }
-        this.group = group;
+        if (this.group != null) throw new IllegalStateException("group set already");
+        this.group = group; // group属性赋值为EventLoopGroup实例 服务端ServerBootstrap传进来的是bossGroup 客户端Bootstrap传进来的是group
         return self();
     }
 
@@ -310,7 +299,29 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() { // 完成了channel的register操作
         Channel channel = null;
         try {
-            channel = this.channelFactory.newChannel(); // 调用相应Channel的无参构造方法 构造channel实例 同时会构造pipeline实例 此时pipeline中只有head和tail两个handler
+            /**
+             * <p><h3>netty的channel实例化</h3></p>
+             * <p>调用{@link io.netty.channel.socket.nio.NioServerSocketChannel#NioServerSocketChannel()}无参构造方法</p>
+             *
+             * <ul>
+             *     <li>创建jdk的ServerSocketChannel</li>
+             *     <li>给每个netty channel分配属性</li>
+             *     <ul>
+             *         <li>id</li>
+             *         <li>unsafe实例</li>
+             *         <li>pipeline实例(此时pipeline中只有head和tail两个handler)</li>
+             *     </ul>
+             *     <li>netty的NioServerSocketChannel组合jdk的ServerSocketChannel</li>
+             *     <li>服务端NioServerSocketChannel关注OP_ACCEPT连接事件</li>
+             *     <li>设置jdk ServerSocketChannel的非阻塞模式</li>
+             * </ul>
+             *
+             */
+            channel = this.channelFactory.newChannel();
+            /**
+             * <p><h3>channel初始化</h3></p>
+             * <p>将辅助handler {@link ChannelInitializer}的实例 通过{@link ServerBootstrap#childHandler(ChannelHandler)}方法添加到channel中的pipeline中</p>
+             */
             this.init(channel); // 对channel中持有的pipeline中handler的添加
         } catch (Throwable t) {
             if (channel != null) {
@@ -323,7 +334,25 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
-        ChannelFuture regFuture = this.config().group().register(channel); // 至此在register()方法之前 channel已经实例化 设置了非阻塞 实例化了Unsafe 实例化了pipeline 同时往pipeline中添加了head和tail以及一个ChannelInitializer实例 config().group()返回的是NioEventLoopGroup实例 调用register()方法
+        /**
+         * 至此在register(...)方法之前 已经完成的工作
+         * <ul>
+         *     <li>channel实例化</li>
+         *     <li>pipeline实例化</li>
+         *     <li>unsafe实例化</li>
+         *     <li>设置了jdk channel的非阻塞模式</li>
+         *     <li>pipeline中添加了head和tail以及{@link ChannelInitializer}辅助类的实例</li>
+         * </ul>
+         *
+         * <pre>{@code this.config().group()}返回的是{@link io.netty.channel.nio.NioEventLoopGroup}实例</pre>
+         *
+         * <p><pre>{@code register(...)}</pre>方法本质就是调用{@link io.netty.channel.nio.NioEventLoopGroup}的方法 该方法又是从父类{@link MultithreadEventLoopGroup#register(Channel)}中继承的
+         * 其中的逻辑<pre>{@code this.next()}</pre>方法是从{@link io.netty.channel.nio.NioEventLoopGroup}中选择一个{@link io.netty.channel.nio.NioEventLoop}出来 最终执行的是{@link io.netty.channel.nio.NioEventLoop}的<pre>{@code register()}</pre>方法
+         * 这个方法又是从{@link SingleThreadEventLoop#register(Channel)}中继承来的</p>
+         *
+         * <p>因此<pre>{@code register(...)}</pre>最终实现是在{@link SingleThreadEventLoop#register(Channel)}中</p>
+         */
+        ChannelFuture regFuture = this.config().group().register(channel);
         if (regFuture.cause() != null) { // 在register过程中发生异常
             if (channel.isRegistered()) {
                 channel.close();
@@ -377,9 +406,16 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      *
      * @deprecated Use {@link #config()} instead.
      */
+    /**
+     * <p>返回{@link AbstractBootstrap}的group属性</p>
+     * <ul>
+     *     <li>{@link ServerBootstrap}返回的是bossGroup实例{@link io.netty.channel.nio.NioEventLoopGroup}</li>
+     *     <li>{@link Bootstrap}返回的是group实例{@link io.netty.channel.nio.NioEventLoopGroup}</li>
+     * </ul>
+     */
     @Deprecated
     public final EventLoopGroup group() {
-        return group;
+        return this.group;
     }
 
     /**

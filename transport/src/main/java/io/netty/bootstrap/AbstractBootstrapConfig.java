@@ -76,6 +76,13 @@ public abstract class AbstractBootstrapConfig<B extends AbstractBootstrap<B, C>,
     /**
      * Returns the configured {@link EventLoopGroup} or {@code null} if non is configured yet.
      */
+    /**
+     * <p>返回{@link AbstractBootstrap}的group属性</p>
+     * <ul>
+     *     <li>{@link ServerBootstrap}返回的是bossGroup实例{@link io.netty.channel.nio.NioEventLoopGroup}</li>
+     *     <li>{@link Bootstrap}返回的是group实例{@link io.netty.channel.nio.NioEventLoopGroup}</li>
+     * </ul>
+     */
     @SuppressWarnings("deprecation")
     public final EventLoopGroup group() {
         return bootstrap.group();

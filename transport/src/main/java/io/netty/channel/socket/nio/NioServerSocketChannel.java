@@ -15,10 +15,7 @@
  */
 package io.netty.channel.socket.nio;
 
-import io.netty.channel.ChannelException;
-import io.netty.channel.ChannelMetadata;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelOutboundBuffer;
+import io.netty.channel.*;
 import io.netty.util.internal.SocketUtils;
 import io.netty.channel.nio.AbstractNioMessageChannel;
 import io.netty.channel.socket.DefaultServerSocketChannelConfig;
@@ -32,6 +29,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
+import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -88,7 +86,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel implements
      */
     public NioServerSocketChannel(ServerSocketChannel channel) { // 这个channel就是newSocket(...)创建出来jdk的ServerSocketChannel
         super(null, channel, SelectionKey.OP_ACCEPT); // 调用父类构造器 保存属性 设置ServerSocketChannel的非阻塞模式 服务端关心的是SelectionKey.OP_ACCEPT事件 等待客户端连接
-        config = new NioServerSocketChannelConfig(this, javaChannel().socket()); // 创建NioServerSocketChannelConfig实例 保存channel配置信息
+        this.config = new NioServerSocketChannelConfig(this, this.javaChannel().socket()); // 创建NioServerSocketChannelConfig实例 保存channel配置信息
     }
 
     @Override
@@ -118,6 +116,10 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel implements
         return null;
     }
 
+    /**
+     * <p>netty channel中组合的jdk channel实例</p>
+     * <p>{@link io.netty.channel.nio.AbstractNioChannel#AbstractNioChannel(Channel, SelectableChannel, int)}的构造方法中绑定了netty和jdk的channel关系</p>
+     */
     @Override
     protected ServerSocketChannel javaChannel() {
         return (ServerSocketChannel) super.javaChannel();

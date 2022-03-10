@@ -15,6 +15,7 @@
  */
 package io.netty.channel;
 
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.RejectedExecutionHandler;
 import io.netty.util.concurrent.RejectedExecutionHandlers;
 import io.netty.util.concurrent.SingleThreadEventExecutor;
@@ -81,6 +82,15 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
         return this.register(new DefaultChannelPromise(channel, this)); // 实例化一个Promise 将当前channel带进到promise中去
     }
 
+    /**
+     * <p>涉及3个方法</p>
+     *
+     * <p>
+     *     <ul><pre>{@code channel()}</pre>返回的初始化好了的{@link io.netty.channel.socket.nio.NioServerSocketChannel}实例 发生在{@link NioServerSocketChannel#NioServerSocketChannel()}</ul>
+     *     <ul><pre>{@code unsafe()}</pre>返回的是初始化channel实例的时候给每个channel分配的{@link io.netty.channel.Channel.Unsafe}实例 对象类型是{@link io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe} 发生在{@link AbstractChannel#AbstractChannel(Channel)}</ul>
+     *     <ul><pre>{@code register()}</pre>执行的是{@link io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe}的register(...)方法 实现是在其父类中{@link io.netty.channel.AbstractChannel.AbstractUnsafe#register(EventLoop, ChannelPromise)}</ul>
+     * </p>
+     */
     @Override
     public ChannelFuture register(final ChannelPromise promise) {
         ObjectUtil.checkNotNull(promise, "promise");
