@@ -50,7 +50,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     // purposes.
     private final Map<ChannelOption<?>, Object> childOptions = new LinkedHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> childAttrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
-    private final ServerBootstrapConfig config = new ServerBootstrapConfig(this);
+    private final ServerBootstrapConfig config = new ServerBootstrapConfig(this); // 创建ServerBootstrapConfig实例 对象中bootstrap属性持有ServerBootstrap的实例 可以通过config获取到bootstrap所有的属性
     private volatile EventLoopGroup childGroup;
     private volatile ChannelHandler childHandler;
 
@@ -142,9 +142,8 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             public void initChannel(final Channel ch) {
                 final ChannelPipeline pipeline = ch.pipeline();
                 ChannelHandler handler = config.handler(); // 这个handler是在ServerBootstrap::handler()方法中指定的handler实例
-                if (handler != null) {
+                if (handler != null)
                     pipeline.addLast(handler); // 将handler添加到pipeline中
-                }
 
                 ch.eventLoop().execute(new Runnable() {
                     @Override
