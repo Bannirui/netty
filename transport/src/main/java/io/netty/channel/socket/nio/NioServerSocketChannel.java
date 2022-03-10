@@ -50,6 +50,9 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel implements
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(NioServerSocketChannel.class);
 
+    /**
+     * <p>创建jdk的ServerSocketChannel</p>
+     */
     private static ServerSocketChannel newSocket(SelectorProvider provider) {
         try {
             /**
@@ -83,7 +86,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel implements
     /**
      * Create a new instance using the given {@link ServerSocketChannel}.
      */
-    public NioServerSocketChannel(ServerSocketChannel channel) {
+    public NioServerSocketChannel(ServerSocketChannel channel) { // 这个channel就是newSocket(...)创建出来jdk的ServerSocketChannel
         super(null, channel, SelectionKey.OP_ACCEPT); // 调用父类构造器 保存属性 设置ServerSocketChannel的非阻塞模式 服务端关心的是SelectionKey.OP_ACCEPT事件 等待客户端连接
         config = new NioServerSocketChannelConfig(this, javaChannel().socket()); // 创建NioServerSocketChannelConfig实例 保存channel配置信息
     }

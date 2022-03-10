@@ -117,9 +117,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     @Deprecated
     public B channelFactory(ChannelFactory<? extends C> channelFactory) {
         ObjectUtil.checkNotNull(channelFactory, "channelFactory");
-        if (this.channelFactory != null) {
-            throw new IllegalStateException("channelFactory set already");
-        }
+        if (this.channelFactory != null) throw new IllegalStateException("channelFactory set already");
 
         this.channelFactory = channelFactory; // 设置channelFactory属性 将ReflectiveChannelFactory实例赋值给该属性 在channelFactory中初始化了NioServerSocket的class对象
         return self();
@@ -201,12 +199,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * call the super method in that case.
      */
     public B validate() {
-        if (group == null) {
-            throw new IllegalStateException("group not set");
-        }
-        if (channelFactory == null) {
-            throw new IllegalStateException("channel or channelFactory not set");
-        }
+        if (this.group == null) throw new IllegalStateException("group not set");
+        if (this.channelFactory == null) throw new IllegalStateException("channel or channelFactory not set");
         return self();
     }
 
@@ -264,21 +258,19 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * Create a new {@link Channel} and bind it.
      */
     public ChannelFuture bind(SocketAddress localAddress) {
-        validate();
+        this.validate();
         return this.doBind(ObjectUtil.checkNotNull(localAddress, "localAddress"));
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
         final ChannelFuture regFuture = this.initAndRegister(); // 完成了channel的register操作
-        final Channel channel = regFuture.channel();
-        if (regFuture.cause() != null) {
-            return regFuture;
-        }
+        final Channel channel = regFuture.channel(); // 获取channel
+        if (regFuture.cause() != null) return regFuture;
 
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
-            doBind0(regFuture, channel, localAddress, promise);
+            doBind0(regFuture, channel, localAddress, promise); // 绑定
             return promise;
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
@@ -304,10 +296,21 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
     }
 
+    /**
+     * <p>{@link AbstractBootstrap#channelFactory}的属性赋值发生于{@link AbstractBootstrap#channel(Class)}->{@link AbstractBootstrap#channelFactory(io.netty.channel.ChannelFactory)}->{@link AbstractBootstrap#channelFactory(ChannelFactory)}</p>
+     * <p>channelFactory被赋值为{@link ReflectiveChannelFactory}的实例 传入{@link io.netty.channel.socket.nio.NioServerSocketChannel}或者{@link io.netty.channel.socket.nio.NioSocketChannel}的class对象 调用{@link ReflectiveChannelFactory#ReflectiveChannelFactory(Class)}构造方法创建{@link ReflectiveChannelFactory}的实例</p>
+     * <p>因此
+     * <pre>
+     *     {@code channel = this.channelFactory.newChannel()}
+     * </pre>
+     * 所调用的<pre>{@code newChannel()}</pre>方法本质上就是调用{@link ReflectiveChannelFactory#newChannel()} 该方法的执行逻辑就是反射创建{@link io.netty.channel.socket.nio.NioServerSocketChannel}或者{@link io.netty.channel.socket.nio.NioSocketChannel}实例</p>
+     *
+     * <p></p>
+     */
     final ChannelFuture initAndRegister() { // 完成了channel的register操作
         Channel channel = null;
         try {
-            channel = channelFactory.newChannel(); // 调用相应Channel的无参构造方法 构造channel实例 同时会构造pipeline实例 此时pipeline中只有head和tail两个handler
+            channel = this.channelFactory.newChannel(); // 调用相应Channel的无参构造方法 构造channel实例 同时会构造pipeline实例 此时pipeline中只有head和tail两个handler
             this.init(channel); // 对channel中持有的pipeline中handler的添加
         } catch (Throwable t) {
             if (channel != null) {

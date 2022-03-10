@@ -1,15 +1,12 @@
 # study
 
-
 ### 服务端启动
 
 * [X]  服务端初始化
-* [ ]  NioServerSocketChannel
+* [X]  NioServerSocketChannel创建
 * [ ]  服务端Channel初始化
 * [ ]  注册多路复用
-* [ ]  绑定端口[](https://)
-
-
+* [ ]  绑定端口
 
 ### NioEventLoop
 
@@ -22,7 +19,6 @@
 * [ ]  处理IO事件
 * [ ]  执行任务队列
 
-
 ### 客户端接入流程
 
 * [ ]  初始化NioSocketChannelConfig
@@ -30,7 +26,6 @@
 * [ ]  NioSocketChannel的创建
 * [ ]  NioSocketChannel注册到selector
 * [ ]  监听读写事件
-
 
 ### pipeline
 
@@ -40,7 +35,6 @@
 * [ ]  传播inbound事件
 * [ ]  传播outbound事件
 * [ ]  传播异常事件
-
 
 ### ByteBuf
 
@@ -55,14 +49,12 @@
 * [ ]  ByteBuf回收
 * [ ]  SocketChannel读取数据的过程
 
-
 ### 解码器
 
 * [ ]  ByteToMessageDecoder
 * [ ]  固定长度解码器
 * [ ]  行解码器
 * [ ]  分隔符解码器
-
 
 ### 编码器和写数据
 

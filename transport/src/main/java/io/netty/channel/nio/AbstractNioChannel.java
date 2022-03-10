@@ -78,10 +78,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
      */
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
         super(parent);
-        this.ch = ch;
+        this.ch = ch; // jdk的channel 绑定jdk底层的ServerSocketChannel netty的channel跟jdk的channel关系是组合关系 在netty的channel中有个jdk的channel成员变量 这个成员变量定义在AbstractNioChannel中
         this.readInterestOp = readInterestOp; // 保存SelectionKey信息 客户端关注读取事件 服务端关注连接事件(NioSocketChannel的OP_READ NioServerSocketChannel的OP_ACCEPT)
         try {
-            ch.configureBlocking(false); // 设置channel的非阻塞模式
+            ch.configureBlocking(false); // 将jdk的channel设置为非阻塞模式
         } catch (IOException e) {
             try {
                 ch.close();

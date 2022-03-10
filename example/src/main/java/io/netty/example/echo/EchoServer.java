@@ -23,11 +23,31 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 
+import java.net.SocketAddress;
+
 /**
  * Echoes back any received data from a client.
  */
 public final class EchoServer {
 
+    /**
+     * <p><h3>Netty启动流程</h3></p>
+     *
+     * <p><h4>服务端</h4></p>
+     * <ul>
+     *     <li>1 {@link ServerBootstrap#ServerBootstrap()}创建启动引导实例</li>
+     *     <li>2 {@link ServerBootstrap#group(EventLoopGroup, EventLoopGroup)}初始化boss和worker线程池</li>
+     *     <li>3 {@link ServerBootstrap#channel(Class)}传入{@link NioServerSocketChannel}的{@link Class}对象调用{@link ReflectiveChannelFactory#ReflectiveChannelFactory(Class)}创建{@link ReflectiveChannelFactory}实例 赋值给{@link io.netty.bootstrap.AbstractBootstrap#channelFactory}
+     *     而{@link ReflectiveChannelFactory}的构造方法就是将{@link ReflectiveChannelFactory#constructor}属性赋值为{@link NioServerSocketChannel}的构造器
+     *     </li>
+     *     <li>4 {@link ServerBootstrap#bind(int)}->{@link ServerBootstrap#doBind(SocketAddress)}</li>
+     *     <ul>
+     *         <li>{@link ServerBootstrap#initAndRegister()}中<pre>{@code channel=this.channelFactory.newChannel()}</pre>就是调用已经实例化了的{@link ReflectiveChannelFactory#newChannel()}对象方法 而该方法就是调用<pre>{@code return this.constructor.newInstance()}</pre> 利用反射创建{@link NioServerSocketChannel}的实例</li>
+     *     </ul>
+     * </ul>
+     * 
+     * <p><h4>客户端</h4></p>
+     */
     public static void main(String[] args) throws Exception {
 
         // Configure the server.
