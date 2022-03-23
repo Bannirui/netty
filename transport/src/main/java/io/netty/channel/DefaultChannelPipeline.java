@@ -963,7 +963,14 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
-        return tail.bind(localAddress, promise); // bind是交给pipeline来执行的 bind属于Outbound类型的操作 从pipeline的tail开始
+        /**
+         * bind是交给pipeline来执行的 bind属于Outbound类型的操作 从pipeline的tail开始
+         * head和tail的基类是AbstractChannelHandlerContext 具体实现维护在当前类的两个内部类中HeadContext和TailContext
+         * 所以bind方法会跳到内部类的对应方法中
+         * {@link HeadContext#bind(ChannelHandlerContext, SocketAddress, ChannelPromise)}
+         * {@link TailContext#bind(SocketAddress, ChannelPromise)}
+         */
+        return tail.bind(localAddress, promise);
     }
 
     @Override
@@ -1295,8 +1302,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
-    final class HeadContext extends AbstractChannelHandlerContext
-            implements ChannelOutboundHandler, ChannelInboundHandler {
+    final class HeadContext extends AbstractChannelHandlerContext implements ChannelOutboundHandler, ChannelInboundHandler {
 
         private final Unsafe unsafe;
 
@@ -1322,8 +1328,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
 
         @Override
-        public void bind(
-                ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) {
+        public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) {
             unsafe.bind(localAddress, promise);
         }
 

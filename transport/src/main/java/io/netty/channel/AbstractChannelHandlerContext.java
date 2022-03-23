@@ -480,16 +480,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     @Override
     public ChannelFuture bind(final SocketAddress localAddress, final ChannelPromise promise) {
         ObjectUtil.checkNotNull(localAddress, "localAddress");
-        if (isNotValidPromise(promise, false)) {
-            // cancelled
-            return promise;
-        }
-
+        if (isNotValidPromise(promise, false)) return promise;
         final AbstractChannelHandlerContext next = findContextOutbound(MASK_BIND);
         EventExecutor executor = next.executor();
-        if (executor.inEventLoop()) {
+        if (executor.inEventLoop())
             next.invokeBind(localAddress, promise);
-        } else {
+        else {
             safeExecute(executor, new Runnable() {
                 @Override
                 public void run() {

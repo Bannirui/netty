@@ -136,7 +136,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel implements
         if (PlatformDependent.javaVersion() >= 7) {
             javaChannel().bind(localAddress, config.getBacklog());
         } else {
-            javaChannel().socket().bind(localAddress, config.getBacklog());
+            javaChannel().socket().bind(localAddress, config.getBacklog()); // jdk的方法 jdk channel绑定端口
         }
     }
 

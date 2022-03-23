@@ -408,16 +408,15 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     @Override
     protected void doBeginRead() throws Exception {
         // Channel.read() or ChannelHandlerContext.read() was called
-        final SelectionKey selectionKey = this.selectionKey;
-        if (!selectionKey.isValid()) {
+        final SelectionKey selectionKey = this.selectionKey; // 获取到selectionKey
+        if (!selectionKey.isValid())
             return;
-        }
 
         readPending = true;
-
+        // 感兴趣的事件
         final int interestOps = selectionKey.interestOps();
-        if ((interestOps & readInterestOp) == 0) {
-            selectionKey.interestOps(interestOps | readInterestOp);
+        if ((interestOps & readInterestOp) == 0) { // 判断是不是对任何事件都不监听
+            selectionKey.interestOps(interestOps | readInterestOp); // 注册完accept事件之后就可以轮询selector 监听是否有新连接接入了
         }
     }
 

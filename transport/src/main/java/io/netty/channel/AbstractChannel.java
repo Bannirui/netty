@@ -259,7 +259,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     @Override
     public ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
-        return pipeline.bind(localAddress, promise);
+        return this.pipeline.bind(localAddress, promise); // 通过pipeline绑定端口 这个pipeline就是channel初始化时创建的pipeline
     }
 
     @Override
@@ -562,9 +562,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         public final void bind(final SocketAddress localAddress, final ChannelPromise promise) {
             assertEventLoop();
 
-            if (!promise.setUncancellable() || !ensureOpen(promise)) {
+            if (!promise.setUncancellable() || !ensureOpen(promise))
                 return;
-            }
 
             // See: https://github.com/netty/netty/issues/576
             if (Boolean.TRUE.equals(config().getOption(ChannelOption.SO_BROADCAST)) &&
@@ -573,14 +572,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 !PlatformDependent.isWindows() && !PlatformDependent.maybeSuperUser()) {
                 // Warn a user about the fact that a non-root user can't receive a
                 // broadcast packet on *nix if the socket is bound on non-wildcard address.
-                logger.warn(
-                        "A non-root user can't receive a broadcast packet if the socket " +
-                        "is not bound to a wildcard address; binding to a non-wildcard " +
-                        "address (" + localAddress + ") anyway as requested.");
             }
 
             boolean wasActive = isActive();
             try {
+                /**
+                 * 子类{@link io.netty.channel.socket.nio.NioServerSocketChannel#doBind(SocketAddress)} 调用jdk的channel绑定端口的逻辑
+                 */
                 doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
@@ -588,10 +586,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
-            if (!wasActive && isActive()) {
+            if (!wasActive && isActive()) { // 之前不是active 绑定之后是active
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {
+                        /**
+                         * 传输active事件 事件完成之后会调用{@link AbstractUnsafe#beginRead()}
+                         */
                         pipeline.fireChannelActive();
                     }
                 });

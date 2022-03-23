@@ -253,7 +253,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
         final ChannelFuture regFuture = this.initAndRegister(); // 完成了channel的register操作
-        final Channel channel = regFuture.channel(); // 获取channel
+        final Channel channel = regFuture.channel(); // 获取channel NioServerSocketChannel的实例
         if (regFuture.cause() != null) return regFuture;
 
         if (regFuture.isDone()) {
@@ -375,20 +375,17 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     abstract void init(Channel channel) throws Exception;
 
-    private static void doBind0(
-            final ChannelFuture regFuture, final Channel channel,
-            final SocketAddress localAddress, final ChannelPromise promise) {
-
+    private static void doBind0(final ChannelFuture regFuture, final Channel channel, final SocketAddress localAddress, final ChannelPromise promise) {
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.
         channel.eventLoop().execute(new Runnable() {
             @Override
             public void run() {
-                if (regFuture.isSuccess()) {
-                    channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
-                } else {
-                    promise.setFailure(regFuture.cause());
-                }
+                /**
+                 * 绑定端口 调用到{@link AbstractChannel#bind(SocketAddress, ChannelPromise)}
+                 */
+                if (regFuture.isSuccess()) channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+                else promise.setFailure(regFuture.cause());
             }
         });
     }
