@@ -30,6 +30,11 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
 
     private DefaultEventExecutorChooserFactory() { }
 
+    /**
+     * 策略模式
+     * NioEventLoop的线程数是2的倍数 一种线程选择方式
+     * NioEventLoop的线程数不是2的倍数 一种线程选择方式
+     */
     @Override
     public EventExecutorChooser newChooser(EventExecutor[] executors) {
         if (isPowerOfTwo(executors.length)) {
@@ -51,6 +56,10 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
             this.executors = executors;
         }
 
+        /**
+         * next()方法的实现就是选择下一个线程的方法
+         * 如果线程数是2的倍数 通过位运算 效率高
+         */
         @Override
         public EventExecutor next() { // 线程池线程数是2的幂次方 位运算
             return executors[idx.getAndIncrement() & executors.length - 1];
@@ -68,6 +77,9 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
             this.executors = executors;
         }
 
+        /*
+         * 线程数不是2的倍数 采用绝对值取模的方式 效率一般
+         */
         @Override
         public EventExecutor next() { // 线程池线程数量不是2的幂次方 采用取模方式
             return executors[(int) Math.abs(idx.getAndIncrement() % executors.length)];

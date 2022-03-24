@@ -119,6 +119,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         /**
          * 创建线程选择器
          * 线程选择策略
+         * NioEventLoop都绑定一个chooser对象 作为线程选择器 通过这个线程选择器 为每一个channel分配不同的线程
          */
         this.chooser = chooserFactory.newChooser(children);
 
