@@ -821,30 +821,28 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     private void execute(Runnable task, boolean immediate) {
-        boolean inEventLoop = super.inEventLoop(); // 判断添加任务的线程是否就是当前EventLoop中的线程
+        boolean inEventLoop = super.inEventLoop(); // 判断添加任务的线程是否就是当前EventLoop中的线程 开启线程肯定会为NioEventLoop绑定一个线程对象 如果判断当前线程对象不是当前NioEventLoop绑定的线程对象 说明执行该方法的线程不是当前NioEventLoop线程
         this.addTask(task); // 添加任务到taskQueue中 如果任务队列已经满了 就触发拒绝策略
         if (!inEventLoop) {
             this.startThread(); // 如果不是NioEventLoop内部的线程提交的任务 判断下线程是否已经启动 如果还没有启动就启动线程
             if (isShutdown()) {
                 boolean reject = false;
                 try {
-                    if (removeTask(task)) {
-                        reject = true;
-                    }
+                    if (removeTask(task)) reject = true;
                 } catch (UnsupportedOperationException e) {
                     // The task queue does not support removal so the best thing we can do is to just move on and
                     // hope we will be able to pick-up the task before its completely terminated.
                     // In worst case we will log on termination.
                 }
-                if (reject) {
-                    reject();
-                }
+                if (reject) reject();
             }
         }
 
-        if (!addTaskWakesUp && immediate) {
-            wakeup(inEventLoop);
-        }
+        /**
+         * 添加task到任务队列之后 NioEventLoop的select()操作是否需要唤醒
+         * addTaskWakesUp属性是在初始化NioEventLoop的时候传入的 默认为false
+         */
+        if (!addTaskWakesUp && immediate) wakeup(inEventLoop);
     }
 
     @Override
@@ -976,9 +974,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             @Override
             public void run() {
                 thread = Thread.currentThread(); // 将executor线程池中创建的线程设置为NioEventLoop的线程
-                if (interrupted) {
-                    thread.interrupt();
-                }
+                if (interrupted) thread.interrupt();
 
                 boolean success = false;
                 updateLastExecutionTime();
@@ -989,10 +985,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 } finally {
                     for (;;) {
                         int oldState = state;
-                        if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(
-                                SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN)) {
+                        if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN))
                             break;
-                        }
                     }
 
                     // Check if confirmShutdown() was called at the end of the loop.
@@ -1003,20 +997,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                         // Run all remaining tasks and shutdown hooks. At this point the event loop
                         // is in ST_SHUTTING_DOWN state still accepting tasks which is needed for
                         // graceful shutdown with quietPeriod.
-                        for (;;) {
-                            if (confirmShutdown()) {
-                                break;
-                            }
-                        }
+                        for (;;) if (confirmShutdown()) break;
 
                         // Now we want to make sure no more tasks can be added from this point. This is
                         // achieved by switching the state. Any new tasks beyond this point will be rejected.
                         for (;;) {
                             int oldState = state;
-                            if (oldState >= ST_SHUTDOWN || STATE_UPDATER.compareAndSet(
-                                    SingleThreadEventExecutor.this, oldState, ST_SHUTDOWN)) {
+                            if (oldState >= ST_SHUTDOWN || STATE_UPDATER.compareAndSet(SingleThreadEventExecutor.this, oldState, ST_SHUTDOWN))
                                 break;
-                            }
                         }
 
                         // We have the final set of tasks in the queue now, no more can be added, run all remaining.
@@ -1035,10 +1023,6 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                             STATE_UPDATER.set(SingleThreadEventExecutor.this, ST_TERMINATED);
                             threadLock.countDown();
                             int numUserTasks = drainTasks();
-                            if (numUserTasks > 0 && logger.isWarnEnabled()) {
-                                logger.warn("An event executor terminated with " +
-                                        "non-empty task queue (" + numUserTasks + ')');
-                            }
                             terminationFuture.setSuccess(null);
                         }
                     }
