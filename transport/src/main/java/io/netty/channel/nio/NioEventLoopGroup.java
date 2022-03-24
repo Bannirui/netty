@@ -70,6 +70,10 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // netty的�
     }
 
     public NioEventLoopGroup(int nThreads, Executor executor) {
+        /**
+         * executor用于开启NioEventLoop线程所需要的线程执行器
+         * SelectorProvider.provider()用于创建selector
+         */
         this(nThreads, executor, SelectorProvider.provider());
     }
 

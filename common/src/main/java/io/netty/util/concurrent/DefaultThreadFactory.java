@@ -64,6 +64,9 @@ public class DefaultThreadFactory implements ThreadFactory {
         this(toPoolName(poolType), daemon, priority);
     }
 
+    /**
+     * <p>将线程组命名</p>
+     */
     public static String toPoolName(Class<?> poolType) {
         ObjectUtil.checkNotNull(poolType, "poolType");
 
@@ -85,15 +88,13 @@ public class DefaultThreadFactory implements ThreadFactory {
     public DefaultThreadFactory(String poolName, boolean daemon, int priority, ThreadGroup threadGroup) {
         ObjectUtil.checkNotNull(poolName, "poolName");
 
-        if (priority < Thread.MIN_PRIORITY || priority > Thread.MAX_PRIORITY) {
-            throw new IllegalArgumentException(
-                    "priority: " + priority + " (expected: Thread.MIN_PRIORITY <= priority <= Thread.MAX_PRIORITY)");
-        }
+        if (priority < Thread.MIN_PRIORITY || priority > Thread.MAX_PRIORITY)
+            throw new IllegalArgumentException("priority: " + priority + " (expected: Thread.MIN_PRIORITY <= priority <= Thread.MAX_PRIORITY)");
 
-        prefix = poolName + '-' + poolId.incrementAndGet() + '-';
+        prefix = poolName + '-' + poolId.incrementAndGet() + '-'; // 线程名字前缀
         this.daemon = daemon;
-        this.priority = priority;
-        this.threadGroup = threadGroup;
+        this.priority = priority; // 优先级
+        this.threadGroup = threadGroup; // 初始化线程组
     }
 
     public DefaultThreadFactory(String poolName, boolean daemon, int priority) {

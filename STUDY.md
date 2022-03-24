@@ -4,13 +4,13 @@
 
 * [X]  服务端初始化
 * [X]  NioServerSocketChannel创建
-* [ ]  服务端Channel初始化
-* [ ]  注册多路复用
-* [ ]  绑定端口
+* [X]  服务端Channel初始化
+* [X]  注册多路复用
+* [X]  绑定端口
 
 ### NioEventLoop
 
-* [ ]  NioEventLoopGroup创建线程执行器
+* [X]  NioEventLoopGroup创建线程执行器
 * [ ]  NioEventLoopGroup创建NioEventLoop
 * [ ]  初始化线程选择器
 * [ ]  NioEventLoop线程启动

@@ -72,10 +72,10 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         checkPositive(nThreads, "nThreads");
 
         if (executor == null) {
-            executor = new ThreadPerTaskExecutor(newDefaultThreadFactory()); // 构造一个executor 这个线程池不是给NioEventLoopGroup使用的 而是给NioEventLoop使用的 每来一个任务就新建一个线程
+            executor = new ThreadPerTaskExecutor(newDefaultThreadFactory()); // 构造一个executor线程执行器 这个线程池不是给NioEventLoopGroup使用的 而是给NioEventLoop使用的 每来一个任务就新建一个线程
         }
 
-        children = new EventExecutor[nThreads]; //children数组 线程池中的线程数组
+        children = new EventExecutor[nThreads]; //NioEventLoop children数组 线程池中的线程数组
 
         for (int i = 0; i < nThreads; i ++) { // 实例化children数组中的每一个元素
             boolean success = false;
@@ -107,7 +107,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
-        chooser = chooserFactory.newChooser(children); // 线程选择策略
+        this.chooser = chooserFactory.newChooser(children); // 线程选择策略
 
         final FutureListener<Object> terminationListener = new FutureListener<Object>() { // 设置一个listener用来监听线程池中的termination事件 给线程池中的每一个线程都设置这个listener 当监听到所有线程都terminate以后 这个线程池就算真正的terminate了
             @Override

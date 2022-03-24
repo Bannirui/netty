@@ -51,6 +51,11 @@ public final class EchoServer {
     public static void main(String[] args) throws Exception {
 
         // Configure the server.
+        /**
+         * boss线程组和worker线程组相当于2个NioEventLoop的集合 默认每个NioEventLoopGroup创建时 如果不传入线程数就会创建cpu核数*2个NioEventLoop线程
+         * boos线程通过轮询处理Server的accept事件 完成accept事件之后就会创建客户端channel 通过一定的策略 分发到worker线程进行处理
+         * worker线程主要用于处理客户端的读写事件
+         */
         EventLoopGroup bossGroup = new NioEventLoopGroup(1); // Netty线程模型 服务端2个group Netty中的线程池
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         try {

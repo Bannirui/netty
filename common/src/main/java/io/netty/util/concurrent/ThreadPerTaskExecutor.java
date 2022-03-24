@@ -29,6 +29,6 @@ public final class ThreadPerTaskExecutor implements Executor { // 只有一个ex
 
     @Override
     public void execute(Runnable command) {
-        threadFactory.newThread(command).start(); // 为每个任务新建一个线程
+        threadFactory.newThread(command).start(); // 为每个任务新建一个线程 这个execute方法就是用来开启NioEventLoop线程用的
     }
 }
