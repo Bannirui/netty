@@ -32,23 +32,23 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
     @Override
     public boolean add(SelectionKey o) {
-        if (o == null) {
-            return false;
-        }
-
+        if (o == null) return false;
         keys[size++] = o;
-        if (size == keys.length) {
-            increaseCapacity();
-        }
-
+        if (size == keys.length) increaseCapacity();
         return true;
     }
 
+    /**
+     * 不支持该方法
+     */
     @Override
     public boolean remove(Object o) {
         return false;
     }
 
+    /**
+     * 不支持该方法
+     */
     @Override
     public boolean contains(Object o) {
         return false;
@@ -71,12 +71,13 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
             @Override
             public SelectionKey next() {
-                if (!hasNext()) {
-                    throw new NoSuchElementException();
-                }
+                if (!hasNext()) throw new NoSuchElementException();
                 return keys[idx++];
             }
 
+            /**
+             * 不支持该方法
+             */
             @Override
             public void remove() {
                 throw new UnsupportedOperationException();
