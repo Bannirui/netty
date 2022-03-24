@@ -45,7 +45,7 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
     }
 
     protected AbstractEventExecutor(EventExecutorGroup parent) {
-        this.parent = parent;
+        this.parent = parent; // 这个parent就是NioEventLoop所属的线程组NioEventLoopGroup对象
     }
 
     @Override

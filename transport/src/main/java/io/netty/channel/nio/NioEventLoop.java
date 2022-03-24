@@ -147,7 +147,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
         this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider");
         this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
         final SelectorTuple selectorTuple = this.openSelector(); // 开启NIO中的组件 selector 意味着NioEventLoopGroup这个线程池中每个线程NioEventLoop都有自己的selector
-        this.selector = selectorTuple.selector;
+        this.selector = selectorTuple.selector; // 创建NioEventLoop绑定的selector对象
         this.unwrappedSelector = selectorTuple.unwrappedSelector;
     }
 
