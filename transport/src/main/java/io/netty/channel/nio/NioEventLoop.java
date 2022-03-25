@@ -392,15 +392,19 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
         return selector.keys().size() - cancelledKeys;
     }
 
+    /**
+     * netty解决epoll bug的步骤就是创建一个新的selector 将旧selector中注册的channel和事件重新注册到新的selector中 然后将自身selector属性替换成新创建的selector
+     */
     private void rebuildSelector0() {
         final Selector oldSelector = selector;
         final SelectorTuple newSelectorTuple;
 
-        if (oldSelector == null) {
-            return;
-        }
+        if (oldSelector == null) return;
 
         try {
+            /**
+             * 重新创建一个select
+             */
             newSelectorTuple = openSelector();
         } catch (Exception e) {
             logger.warn("Failed to create a new Selector.", e);
@@ -409,23 +413,32 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
 
         // Register all channels to the new Selector.
         int nChannels = 0;
+        /**
+         * 拿到旧select中所有的key
+         */
         for (SelectionKey key: oldSelector.keys()) {
             Object a = key.attachment();
             try {
-                if (!key.isValid() || key.channel().keyFor(newSelectorTuple.unwrappedSelector) != null) {
+                if (!key.isValid() || key.channel().keyFor(newSelectorTuple.unwrappedSelector) != null)
                     continue;
-                }
-
+                /**
+                 * 获取key注册的事件
+                 */
                 int interestOps = key.interestOps();
+                /**
+                 * 将key注册的事件取消
+                 */
                 key.cancel();
+                /**
+                 * 注册到重新创建的selector中
+                 */
                 SelectionKey newKey = key.channel().register(newSelectorTuple.unwrappedSelector, interestOps, a);
-                if (a instanceof AbstractNioChannel) {
-                    // Update SelectionKey
-                    ((AbstractNioChannel) a).selectionKey = newKey;
-                }
+                /**
+                 * 如果channel是NioChannel 就重新赋值
+                 */
+                if (a instanceof AbstractNioChannel) ((AbstractNioChannel) a).selectionKey = newKey;
                 nChannels ++;
             } catch (Exception e) {
-                logger.warn("Failed to re-register a Channel to the new Selector.", e);
                 if (a instanceof AbstractNioChannel) {
                     AbstractNioChannel ch = (AbstractNioChannel) a;
                     ch.unsafe().close(ch.unsafe().voidPromise());
@@ -471,14 +484,10 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
 
                     case SelectStrategy.SELECT: // 任务队列中没有任务
                         long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
-                        if (curDeadlineNanos == -1L) {
-                            curDeadlineNanos = NONE; // nothing on the calendar
-                        }
+                        if (curDeadlineNanos == -1L) curDeadlineNanos = NONE; // nothing on the calendar
                         nextWakeupNanos.set(curDeadlineNanos);
                         try {
-                            if (!hasTasks()) {
-                                strategy = this.select(curDeadlineNanos); // select()方法阻塞
-                            }
+                            if (!hasTasks()) strategy = this.select(curDeadlineNanos); // select()方法阻塞
                         } finally {
                             // This update is just to help block unnecessary selector wakeups
                             // so use of lazySet is ok (no race condition)
@@ -503,9 +512,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                 boolean ranTasks;
                 if (ioRatio == 100) { // 100->先执行IO操作 然后在finally代码块中执行taskQueue中的任务
                     try {
-                        if (strategy > 0) {
-                            processSelectedKeys();
-                        }
+                        if (strategy > 0) processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
                         ranTasks = runAllTasks();
@@ -519,15 +526,11 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                         final long ioTime = System.nanoTime() - ioStartTime; // IO操作耗时
                         ranTasks = runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
-                } else {
+                } else
                     ranTasks = runAllTasks(0); // This will run the minimum number of tasks
-                }
 
-                if (ranTasks || strategy > 0) {
-                    selectCnt = 0;
-                } else if (unexpectedSelectorWakeup(selectCnt)) { // Unexpected wakeup (unusual case)
-                    selectCnt = 0;
-                }
+                if (ranTasks || strategy > 0) selectCnt = 0;
+                else if (unexpectedSelectorWakeup(selectCnt)) selectCnt = 0;
             } catch (CancelledKeyException e) {
                 // Harmless exception - log anyway
             } catch (Error e) {
@@ -539,9 +542,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                 try {
                     if (isShuttingDown()) {
                         closeAll();
-                        if (confirmShutdown()) {
-                            return;
-                        }
+                        if (confirmShutdown()) return;
                     }
                 } catch (Error e) {
                     throw e;
@@ -560,19 +561,12 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
             // also log it.
             //
             // See https://github.com/netty/netty/issues/2426
-            if (logger.isDebugEnabled()) {
-                logger.debug("Selector.select() returned prematurely because " +
-                        "Thread.currentThread().interrupt() was called. Use " +
-                        "NioEventLoop.shutdownGracefully() to shutdown the NioEventLoop.");
-            }
             return true;
         }
         if (SELECTOR_AUTO_REBUILD_THRESHOLD > 0 &&
                 selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) {
             // The selector returned prematurely many times in a row.
             // Rebuild the selector to work around the problem.
-            logger.warn("Selector.select() returned prematurely {} times in a row; rebuilding Selector {}.",
-                    selectCnt, selector);
             rebuildSelector();
             return true;
         }
@@ -580,8 +574,6 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     private static void handleLoopException(Throwable t) {
-        logger.warn("Unexpected exception in the selector loop.", t);
-
         // Prevent possible consecutive immediate failures that lead to
         // excessive CPU consumption.
         try {
@@ -821,9 +813,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     private int select(long deadlineNanos) throws IOException {
-        if (deadlineNanos == NONE) {
-            return selector.select();
-        }
+        if (deadlineNanos == NONE) return selector.select();
         // Timeout will only be 0 if deadline is within 5 microsecs
         long timeoutMillis = deadlineToDelayNanos(deadlineNanos + 995000L) / 1000000L;
         return timeoutMillis <= 0 ? selector.selectNow() : selector.select(timeoutMillis);

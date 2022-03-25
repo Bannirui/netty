@@ -14,8 +14,8 @@
 * [X]  NioEventLoopGroup创建NioEventLoop
 * [X]  初始化线程选择器
 * [X]  NioEventLoop线程启动
-* [ ]  优化selector
-* [ ]  执行select操作
+* [X]  优化selector
+* [X]  执行select操作
 * [ ]  处理IO事件
 * [ ]  执行任务队列
 
