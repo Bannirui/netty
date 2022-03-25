@@ -16,7 +16,7 @@
 * [X]  NioEventLoop线程启动
 * [X]  优化selector
 * [X]  执行select操作
-* [ ]  处理IO事件
+* [X]  处理IO事件
 * [ ]  执行任务队列
 
 ### 客户端接入流程

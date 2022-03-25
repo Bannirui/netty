@@ -512,6 +512,9 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                 boolean ranTasks;
                 if (ioRatio == 100) { // 100->先执行IO操作 然后在finally代码块中执行taskQueue中的任务
                     try {
+                        /**
+                         * 处理轮询到的key
+                         */
                         if (strategy > 0) processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
@@ -520,7 +523,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                 } else if (strategy > 0) { // 不是100 根据IO操作耗时 限制非IO操作耗时
                     final long ioStartTime = System.nanoTime();
                     try {
-                        processSelectedKeys(); // 执行IO操作
+                        this.processSelectedKeys(); // 执行IO操作
                     } finally {
                         // Ensure we always run tasks.
                         final long ioTime = System.nanoTime() - ioStartTime; // IO操作耗时
@@ -584,11 +587,13 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     private void processSelectedKeys() {
-        if (selectedKeys != null) {
-            processSelectedKeysOptimized();
-        } else {
-            processSelectedKeysPlain(selector.selectedKeys());
-        }
+        /**
+         * selectedKeys是经过netty优化过的数据结构替代了jdk原生的方式 如果经过select()操作监听到了事件 selectedKeys的数组就会有值
+         */
+        if (selectedKeys != null)
+            this.processSelectedKeysOptimized();
+        else
+            this.processSelectedKeysPlain(selector.selectedKeys());
     }
 
     @Override
@@ -650,17 +655,23 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     private void processSelectedKeysOptimized() {
+        /**
+         * for循环遍历数组
+         */
         for (int i = 0; i < selectedKeys.size; ++i) {
+            // 获取当前的selectionKey
             final SelectionKey k = selectedKeys.keys[i];
-            // null out entry in the array to allow to have it GC'ed once the Channel close
-            // See https://github.com/netty/netty/issues/2363
+            /**
+             * 数组当前引用设置为null 因为selector不会自动清空
+             * 与使用原生selector时候 通过遍历selector.selectedKeys()的set的时候 拿到key之后要执行remove()是一样的
+             */
             selectedKeys.keys[i] = null;
-
+            // 获取channel NioServerSocketChannel
             final Object a = k.attachment();
-
-            if (a instanceof AbstractNioChannel) {
+            // 根据channel类型调用不同的处理方法
+            if (a instanceof AbstractNioChannel)
                 processSelectedKey(k, (AbstractNioChannel) a);
-            } else {
+            else {
                 @SuppressWarnings("unchecked")
                 NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
                 processSelectedKey(k, task);
@@ -678,7 +689,13 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
+        /**
+         * 获取channel中的unsafe
+         */
         final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
+        /**
+         * 如果key是不合法的 说明这个channel可能有问题
+         */
         if (!k.isValid()) {
             final EventLoop eventLoop;
             try {
@@ -699,11 +716,15 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
             }
             return;
         }
-
+        /**
+         * 执行到这 说明当前的key是合法的
+         */
         try {
+            /**
+             * 拿到key中的io事件
+             */
             int readyOps = k.readyOps();
-            // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
-            // the NIO JDK channel implementation may throw a NotYetConnectedException.
+            // 连接事件
             if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
@@ -713,18 +734,21 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
 
                 unsafe.finishConnect();
             }
-
+            // 写事件
             // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
             if ((readyOps & SelectionKey.OP_WRITE) != 0) {
                 // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
                 ch.unsafe().forceFlush();
             }
-
+            /**
+             * 读事件和连接事件
+             * 如果当前NioEventLoop是worker线程 这里就是op_read事件
+             * 如果当前NioEventLoop是boss线程 这里就是op_accept事件
+             */
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
-            if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
+            if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0)
                 unsafe.read();
-            }
         } catch (CancelledKeyException ignored) {
             unsafe.close(unsafe.voidPromise());
         }
