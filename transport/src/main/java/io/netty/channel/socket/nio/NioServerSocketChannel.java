@@ -86,7 +86,13 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel implements
      */
     public NioServerSocketChannel(ServerSocketChannel channel) { // 这个channel就是newSocket(...)创建出来jdk的ServerSocketChannel
         super(null, channel, SelectionKey.OP_ACCEPT); // 调用父类构造器 保存属性 设置ServerSocketChannel的非阻塞模式 服务端关心的是SelectionKey.OP_ACCEPT事件 等待客户端连接
-        this.config = new NioServerSocketChannelConfig(this, this.javaChannel().socket()); // 创建NioServerSocketChannelConfig实例 保存channel配置信息
+        /**
+         * 创建NioServerSocketChannelConfig实例 保存channel配置信息
+         * 每一个NioServerSocketChannel都拥有一个config属性 这个属性存放着NioServerSocketChannel的相关配置
+         * 这里创建了一个NioServerSocketChannelConfig对象 并将当前channel和channel对应的java底层的socket对象进行了传入
+         * NioServerSocketChannelConfig其实是NioServerSocketChannel的内部类
+         */
+        this.config = new NioServerSocketChannelConfig(this, this.javaChannel().socket());
     }
 
     @Override

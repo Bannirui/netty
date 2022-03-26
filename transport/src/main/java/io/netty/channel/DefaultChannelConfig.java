@@ -71,11 +71,22 @@ public class DefaultChannelConfig implements ChannelConfig {
     private volatile WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
     private volatile boolean pinEventExecutor = true;
 
+    /**
+     * 调用自身的构造方法 传入一个channel和一个AdaptiveRecvByteBufAllocator对象
+     * AdaptiveRecvByteBufAllocator是一个缓冲区分配器 用于分配一个缓冲区ByteBuf的
+     * ByteBuf相当于jdk的ByteBuffer Netty对其进行了重新的封装 用于读写channel中的字节流
+     */
     public DefaultChannelConfig(Channel channel) {
         this(channel, new AdaptiveRecvByteBufAllocator());
     }
 
     protected DefaultChannelConfig(Channel channel, RecvByteBufAllocator allocator) {
+        /**
+         * 在channel初始化之前
+         * 调用setRecvByteBufAllocator()方法设置缓冲区分配器
+         * 第一个参数是 新建的AdaptiveRecvByteByfAAllocator对象
+         * 第二个参数是 与channel绑定的ChannelMetadata对象
+         */
         setRecvByteBufAllocator(allocator, channel.metadata());
         this.channel = channel;
     }
@@ -324,6 +335,7 @@ public class DefaultChannelConfig implements ChannelConfig {
         checkNotNull(allocator, "allocator");
         checkNotNull(metadata, "metadata");
         if (allocator instanceof MaxMessagesRecvByteBufAllocator) {
+            // 设置的channel的metadata属性16
             ((MaxMessagesRecvByteBufAllocator) allocator).maxMessagesPerRead(metadata.defaultMaxMessagesPerRead());
         }
         setRecvByteBufAllocator(allocator);

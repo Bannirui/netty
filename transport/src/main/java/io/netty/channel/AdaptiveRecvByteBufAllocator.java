@@ -45,20 +45,17 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
     private static final int[] SIZE_TABLE;
 
     static {
+        // list集合
         List<Integer> sizeTable = new ArrayList<Integer>();
-        for (int i = 16; i < 512; i += 16) {
-            sizeTable.add(i);
-        }
-
+        // [16...512)步进值16添加到集合中
+        for (int i = 16; i < 512; i += 16) sizeTable.add(i);
         // Suppress a warning since i becomes negative when an integer overflow happens
-        for (int i = 512; i > 0; i <<= 1) { // lgtm[java/constant-comparison]
-            sizeTable.add(i);
-        }
-
+        // [512...)倍增添加到集合中 直到内存溢出
+        for (int i = 512; i > 0; i <<= 1) sizeTable.add(i);
+        // 初始化数组
         SIZE_TABLE = new int[sizeTable.size()];
-        for (int i = 0; i < SIZE_TABLE.length; i ++) {
-            SIZE_TABLE[i] = sizeTable.get(i);
-        }
+        // 将list的内容放入数组中
+        for (int i = 0; i < SIZE_TABLE.length; i ++) SIZE_TABLE[i] = sizeTable.get(i);
     }
 
     /**
@@ -67,27 +64,20 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
     @Deprecated
     public static final AdaptiveRecvByteBufAllocator DEFAULT = new AdaptiveRecvByteBufAllocator();
 
+    /**
+     * 二分
+     */
     private static int getSizeTableIndex(final int size) {
         for (int low = 0, high = SIZE_TABLE.length - 1;;) {
-            if (high < low) {
-                return low;
-            }
-            if (high == low) {
-                return high;
-            }
-
+            if (high < low) return low;
+            if (high == low) return high;
             int mid = low + high >>> 1;
             int a = SIZE_TABLE[mid];
             int b = SIZE_TABLE[mid + 1];
-            if (size > b) {
-                low = mid + 1;
-            } else if (size < a) {
-                high = mid - 1;
-            } else if (size == a) {
-                return mid;
-            } else {
-                return mid + 1;
-            }
+            if (size > b) low = mid + 1;
+            else if (size < a) high = mid - 1;
+            else if (size == a) return mid;
+            else return mid + 1;
         }
     }
 
@@ -155,6 +145,11 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
      * go down below {@code 64}, and does not go up above {@code 65536}.
      */
     public AdaptiveRecvByteBufAllocator() {
+        /**
+         * 最小缓冲区长度64字节
+         * 初始容量2048字节
+         * 最大容量65536字节
+         */
         this(DEFAULT_MINIMUM, DEFAULT_INITIAL, DEFAULT_MAXIMUM);
     }
 
@@ -167,27 +162,16 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
      */
     public AdaptiveRecvByteBufAllocator(int minimum, int initial, int maximum) {
         checkPositive(minimum, "minimum");
-        if (initial < minimum) {
-            throw new IllegalArgumentException("initial: " + initial);
-        }
-        if (maximum < initial) {
-            throw new IllegalArgumentException("maximum: " + maximum);
-        }
-
+        if (initial < minimum) throw new IllegalArgumentException("initial: " + initial);
+        if (maximum < initial) throw new IllegalArgumentException("maximum: " + maximum);
+        // 最小容量在table中的下标
         int minIndex = getSizeTableIndex(minimum);
-        if (SIZE_TABLE[minIndex] < minimum) {
-            this.minIndex = minIndex + 1;
-        } else {
-            this.minIndex = minIndex;
-        }
-
+        if (SIZE_TABLE[minIndex] < minimum) this.minIndex = minIndex + 1;
+        else this.minIndex = minIndex;
+        // 最大容量在table中的下标
         int maxIndex = getSizeTableIndex(maximum);
-        if (SIZE_TABLE[maxIndex] > maximum) {
-            this.maxIndex = maxIndex - 1;
-        } else {
-            this.maxIndex = maxIndex;
-        }
-
+        if (SIZE_TABLE[maxIndex] > maximum) this.maxIndex = maxIndex - 1;
+        else this.maxIndex = maxIndex;
         this.initial = initial;
     }
 

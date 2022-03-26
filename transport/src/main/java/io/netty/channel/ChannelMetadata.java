@@ -15,9 +15,9 @@
  */
 package io.netty.channel;
 
-import static io.netty.util.internal.ObjectUtil.checkPositive;
-
 import java.net.SocketAddress;
+
+import static io.netty.util.internal.ObjectUtil.checkPositive;
 
 /**
  * Represents the properties of a {@link Channel} implementation.
@@ -49,7 +49,9 @@ public final class ChannelMetadata {
      */
     public ChannelMetadata(boolean hasDisconnect, int defaultMaxMessagesPerRead) {
         checkPositive(defaultMaxMessagesPerRead, "defaultMaxMessagesPerRead");
+        // 默认值false
         this.hasDisconnect = hasDisconnect;
+        // 默认值16 代表在读取对方的连接或者channel的字节流时(无论server还是client) 最多只循环16次
         this.defaultMaxMessagesPerRead = defaultMaxMessagesPerRead;
     }
 
