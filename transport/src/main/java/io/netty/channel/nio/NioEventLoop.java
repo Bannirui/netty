@@ -523,11 +523,20 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                 } else if (strategy > 0) { // 不是100 根据IO操作耗时 限制非IO操作耗时
                     final long ioStartTime = System.nanoTime();
                     try {
-                        this.processSelectedKeys(); // 执行IO操作
+                        /**
+                         * 执行IO操作
+                         * 处理轮询到的key
+                         */
+                        this.processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
-                        final long ioTime = System.nanoTime() - ioStartTime; // IO操作耗时
-                        ranTasks = runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
+                        // 计算耗时 IO操作耗时
+                        final long ioTime = System.nanoTime() - ioStartTime;
+                        /**
+                         * 执行task
+                         * ioRatio的默认值是50 所以runAllTasks()方法最终的入参就是ioTime
+                         */
+                        ranTasks = super.runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
                 } else
                     ranTasks = runAllTasks(0); // This will run the minimum number of tasks

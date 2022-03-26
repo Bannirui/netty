@@ -275,16 +275,18 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         }
     }
 
+    /**
+     * 从定时任务队列中聚合任务
+     * 从定时任务中找到可以执行的任务将任务添加到普通任务队列taskQueue中
+     */
     private boolean fetchFromScheduledTaskQueue() {
-        if (scheduledTaskQueue == null || scheduledTaskQueue.isEmpty()) {
-            return true;
-        }
+        if (scheduledTaskQueue == null || scheduledTaskQueue.isEmpty()) return true;
+        // 从定时任务队列中寻找截止时间为nanoTime的任务
         long nanoTime = AbstractScheduledEventExecutor.nanoTime();
         for (;;) {
             Runnable scheduledTask = pollScheduledTask(nanoTime);
-            if (scheduledTask == null) {
-                return true;
-            }
+            if (scheduledTask == null) return true;
+            // 添加到普通任务队列过程失败就重新添加回定时任务队列中
             if (!taskQueue.offer(scheduledTask)) {
                 // No space left in the task queue add it back to the scheduledTaskQueue so we pick it up again.
                 scheduledTaskQueue.add((ScheduledFutureTask<?>) scheduledTask);
@@ -371,14 +373,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
         do {
             fetchedAll = fetchFromScheduledTaskQueue();
-            if (runAllTasksFrom(taskQueue)) {
-                ranAtLeastOne = true;
-            }
+            if (runAllTasksFrom(taskQueue)) ranAtLeastOne = true;
         } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
 
-        if (ranAtLeastOne) {
-            lastExecutionTime = ScheduledFutureTask.nanoTime();
-        }
+        if (ranAtLeastOne) lastExecutionTime = ScheduledFutureTask.nanoTime();
         afterRunningAllTasks();
         return ranAtLeastOne;
     }
@@ -455,37 +453,39 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * the tasks in the task queue and returns if it ran longer than {@code timeoutNanos}.
      */
     protected boolean runAllTasks(long timeoutNanos) {
+        // 定时任务队列中聚合任务 也就是从定时任务中找到可以执行的任务添加到普通任务队列taskQueue中
         fetchFromScheduledTaskQueue();
+        // 从普通taskQ中拿一个任务
         Runnable task = pollTask();
         if (task == null) {
+            // task为空 跑完所有的任务执行首位的操作 直接返回
             afterRunningAllTasks();
             return false;
         }
-
+        // 执行到这说明任务队列不为空 先计算一个任务执行截止时间
         final long deadline = timeoutNanos > 0 ? ScheduledFutureTask.nanoTime() + timeoutNanos : 0;
         long runTasks = 0;
         long lastExecutionTime;
+        // 执行每一个任务
         for (;;) {
             safeExecute(task);
-
+            // 标识符 标记当前跑完的任务数
             runTasks ++;
 
             // Check timeout every 64 tasks because nanoTime() is relatively expensive.
             // XXX: Hard-coded value - will make it configurable if it is really a problem.
-            if ((runTasks & 0x3F) == 0) {
-                lastExecutionTime = ScheduledFutureTask.nanoTime();
-                if (lastExecutionTime >= deadline) {
-                    break;
-                }
+            if ((runTasks & 0x3F) == 0) { // 当跑完64个任务会计算一下当前时间
+                lastExecutionTime = ScheduledFutureTask.nanoTime(); // 定时任务初始化到当前时间
+                if (lastExecutionTime >= deadline) break; // 如果超过了截止时间就不再执行
             }
-
+            // 执行到这说明还没超过截止时间 继续从普通任务队列中取任务 直到任务取完队列为空
             task = pollTask();
             if (task == null) {
-                lastExecutionTime = ScheduledFutureTask.nanoTime();
+                lastExecutionTime = ScheduledFutureTask.nanoTime(); // 记录下最后执行时间
                 break;
             }
         }
-
+        // 收尾工作
         afterRunningAllTasks();
         this.lastExecutionTime = lastExecutionTime;
         return true;
