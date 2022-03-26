@@ -15,12 +15,7 @@
  */
 package io.netty.channel.nio;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelConfig;
-import io.netty.channel.ChannelOutboundBuffer;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.ServerChannel;
+import io.netty.channel.*;
 
 import java.io.IOException;
 import java.net.PortUnreachableException;
@@ -65,10 +60,15 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
 
         @Override
         public void read() {
+            // 必须是NioEventLoop方法调用的 不能通过外部线程调用
             assert eventLoop().inEventLoop();
+            // 服务端channel的config
             final ChannelConfig config = config();
+            // 服务端channel的pipeline
             final ChannelPipeline pipeline = pipeline();
+            // 处理服务端接入的速率
             final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+            // 设置配置
             allocHandle.reset(config);
 
             boolean closed = false;
@@ -76,24 +76,29 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
+                        /**
+                         * 创建jdk底层的channel readBuf用于临时承载读到的连接
+                         */
                         int localRead = doReadMessages(readBuf);
-                        if (localRead == 0) {
-                            break;
-                        }
+                        if (localRead == 0) break;
                         if (localRead < 0) {
                             closed = true;
                             break;
                         }
-
+                        // 分配器将读到的连接进行计数
                         allocHandle.incMessagesRead(localRead);
-                    } while (continueReading(allocHandle));
+                    } while (continueReading(allocHandle)); // 连接数是否超过最大值
                 } catch (Throwable t) {
                     exception = t;
                 }
-
+                // 遍历每一条客户端连接
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
+                    /**
+                     * 传递事件 将创建NioSocketChannel进行传递
+                     * 最终调用ServerBootstrap的内部类的方法{@link io.netty.bootstrap.ServerBootstrap.ServerBootstrapAcceptor#channelRead(ChannelHandlerContext, Object)}
+                     */
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
                 readBuf.clear();

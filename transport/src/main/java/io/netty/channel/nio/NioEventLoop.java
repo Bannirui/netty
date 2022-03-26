@@ -753,6 +753,9 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
              * 读事件和连接事件
              * 如果当前NioEventLoop是worker线程 这里就是op_read事件
              * 如果当前NioEventLoop是boss线程 这里就是op_accept事件
+             *
+             * 无论处理op_read事件还是op_accept事件 都走的unsafe的read()方法 这里unsafe是通过channel获取到的
+             * 如果处理的是accept事件 这里的channel是NioServerSocketChannel 与之绑定的是{@link io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe#unsafe}
              */
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop

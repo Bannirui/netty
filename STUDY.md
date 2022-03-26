@@ -22,7 +22,7 @@
 ### 客户端接入流程
 
 * [X]  初始化NioSocketChannelConfig
-* [ ]  处理接入事件handler的创建
+* [X]  处理接入事件handler的创建
 * [ ]  NioSocketChannel的创建
 * [ ]  NioSocketChannel注册到selector
 * [ ]  监听读写事件
