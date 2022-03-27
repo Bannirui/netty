@@ -217,9 +217,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             // Check first if the key is still valid as it may be canceled as part of the deregistration
             // from the EventLoop
             // See https://github.com/netty/netty/issues/2104
-            if (!key.isValid()) {
-                return;
-            }
+            if (!key.isValid()) return;
             int interestOps = key.interestOps();
             if ((interestOps & readInterestOp) != 0) {
                 // only remove readInterestOp if needed
@@ -417,7 +415,11 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         // 感兴趣的事件
         final int interestOps = selectionKey.interestOps();
         if ((interestOps & readInterestOp) == 0) { // 判断是不是对任何事件都不监听
-            selectionKey.interestOps(interestOps | readInterestOp); // 注册完accept事件之后就可以轮询selector 监听是否有新连接接入了
+            /**
+             * 注册完accept事件之后就可以轮询selector 监听是否有新连接接入了
+             * 将之前的accept事件注册 readInterest代表可以读取一个新连接的意思
+             */
+            selectionKey.interestOps(interestOps | readInterestOp);
         }
     }
 

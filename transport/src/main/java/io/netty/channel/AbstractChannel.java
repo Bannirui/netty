@@ -553,7 +553,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                         // again so that we process inbound data.
                         //
                         // See https://github.com/netty/netty/issues/4805
-                        beginRead(); // 该channel已经register过了 让该channel立马去监听通道中的OP_READ事件
+                        this.beginRead(); // 该channel已经register过了 让该channel立马去监听通道中的OP_READ事件
                     }
                 }
             } catch (Throwable t) {
@@ -878,7 +878,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             assertEventLoop();
 
             try {
-                doBeginRead();
+                AbstractChannel.this.doBeginRead();
             } catch (final Exception e) {
                 invokeLater(new Runnable() {
                     @Override
