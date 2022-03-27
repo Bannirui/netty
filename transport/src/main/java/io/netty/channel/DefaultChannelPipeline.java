@@ -199,16 +199,21 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     public final ChannelPipeline addLast(EventExecutorGroup group, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
         synchronized (this) {
+            /**
+             * 判断handler是否被重复添加
+             */
             checkMultiplicity(handler);
-
+            /**
+             * 创建一个HandlerContext并添加到列表
+             */
             newCtx = newContext(group, filterName(name, handler), handler);
-
+            // 添加HandlerContext
             addLast0(newCtx);
 
             // If the registered is false it means that the channel was not registered on an eventLoop yet.
             // In this case we add the context to the pipeline and add a task that will call
             // ChannelHandler.handlerAdded(...) once the channel is registered.
-            if (!registered) {
+            if (!registered) { // 是否已经注册
                 newCtx.setAddPending();
                 callHandlerCallbackLater(newCtx, true);
                 return this;
@@ -216,14 +221,20 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
             EventExecutor executor = newCtx.executor();
             if (!executor.inEventLoop()) {
+                // 回调用户事件
                 callHandlerAddedInEventLoop(newCtx, executor);
                 return this;
             }
         }
-        callHandlerAdded0(newCtx);
+        // 回调添加事件
+        this.callHandlerAdded0(newCtx);
         return this;
     }
 
+    /**
+     * 典型的双链表操作
+     * 将当前节点newCtx挂到双链表中(head和tail是空节点 占位使用)
+     */
     private void addLast0(AbstractChannelHandlerContext newCtx) {
         AbstractChannelHandlerContext prev = tail.prev;
         newCtx.prev = prev;
@@ -277,11 +288,14 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         ctx.prev = newCtx;
     }
 
+    /**
+     * 判断添加handler的name是否重复
+     */
     private String filterName(String name, ChannelHandler handler) {
-        if (name == null) {
-            return generateName(handler);
-        }
-        checkDuplicateName(name);
+        // 没有名字就创建默认的名字
+        if (name == null) return generateName(handler);
+        // 检查名字是否重复
+        this.checkDuplicateName(name);
         return name;
     }
 
@@ -367,20 +381,16 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline addLast(ChannelHandler... handlers) {
-        return addLast(null, handlers);
+        return this.addLast(null, handlers);
     }
 
     @Override
     public final ChannelPipeline addLast(EventExecutorGroup executor, ChannelHandler... handlers) {
         ObjectUtil.checkNotNull(handlers, "handlers");
-
         for (ChannelHandler h: handlers) {
-            if (h == null) {
-                break;
-            }
-            addLast(executor, null, h);
+            if (h == null) break;
+            this.addLast(executor, null, h);
         }
-
         return this;
     }
 
@@ -595,11 +605,8 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private static void checkMultiplicity(ChannelHandler handler) {
         if (handler instanceof ChannelHandlerAdapter) {
             ChannelHandlerAdapter h = (ChannelHandlerAdapter) handler;
-            if (!h.isSharable() && h.added) {
-                throw new ChannelPipelineException(
-                        h.getClass().getName() +
-                        " is not a @Sharable handler, so can't be added or removed multiple times.");
-            }
+            if (!h.isSharable() && h.added)
+                throw new ChannelPipelineException(h.getClass().getName() + " is not a @Sharable handler, so can't be added or removed multiple times.");
             h.added = true;
         }
     }
@@ -1051,17 +1058,16 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     private void checkDuplicateName(String name) {
-        if (context0(name) != null) {
-            throw new IllegalArgumentException("Duplicate handler name: " + name);
-        }
+        if (context0(name) != null) throw new IllegalArgumentException("Duplicate handler name: " + name);
     }
 
+    /**
+     * 将pipeline中从head节点往下遍历HandlerContext 一直遍历到tail 如果发现名字相同则会任务重复并返回HandlerContext对象
+     */
     private AbstractChannelHandlerContext context0(String name) {
         AbstractChannelHandlerContext context = head.next;
         while (context != tail) {
-            if (context.name().equals(name)) {
-                return context;
-            }
+            if (context.name().equals(name)) return context;
             context = context.next;
         }
         return null;

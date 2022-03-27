@@ -55,6 +55,9 @@ public abstract class ChannelHandlerAdapter implements ChannelHandler {
         Map<Class<?>, Boolean> cache = InternalThreadLocalMap.get().handlerSharableCache();
         Boolean sharable = cache.get(clazz);
         if (sharable == null) {
+            /**
+             * 如果类注解了{@link io.netty.channel.ChannelHandler.Sharable}注解 就说明这个类会被多个channel共享
+             */
             sharable = clazz.isAnnotationPresent(Sharable.class);
             cache.put(clazz, sharable);
         }
