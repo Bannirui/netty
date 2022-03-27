@@ -56,6 +56,9 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
 
     private final class NioMessageUnsafe extends AbstractNioUnsafe {
 
+        /**
+         * 简单的list {@link AbstractNioMessageChannel#doReadMessages(List)}方法将读到的连接放入到这个list中
+         */
         private final List<Object> readBuf = new ArrayList<Object>();
 
         @Override
@@ -79,7 +82,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                         /**
                          * 创建jdk底层的channel readBuf用于临时承载读到的连接
                          */
-                        int localRead = doReadMessages(readBuf);
+                        int localRead = AbstractNioMessageChannel.this.doReadMessages(readBuf);
                         if (localRead == 0) break;
                         if (localRead < 0) {
                             closed = true;

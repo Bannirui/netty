@@ -17,6 +17,7 @@ package io.netty.channel;
 
 import io.netty.bootstrap.AbstractBootstrap;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.channel.nio.AbstractNioByteChannel;
 import io.netty.channel.nio.AbstractNioMessageChannel;
 import io.netty.channel.socket.ChannelOutputShutdownEvent;
 import io.netty.channel.socket.ChannelOutputShutdownException;
@@ -73,7 +74,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     protected AbstractChannel(Channel parent) {
         this.parent = parent;
         id = this.newId(); // 给每个channel分配一个唯一id
-        unsafe = this.newUnsafe(); // 每个channel内部都需要一个Unsafe实例 执行偏底层的操作
+        /**
+         * 每个channel内部都需要一个Unsafe实例 执行偏底层的操作
+         * {@link io.netty.channel.nio.NioEventLoop}调用的时候会走到其父类的{@link AbstractNioByteChannel#newUnsafe()}方法
+         */
+        unsafe = this.newUnsafe();
         pipeline = this.newChannelPipeline(); // 每个channel内部都会创建一个pipeline
     }
 

@@ -77,6 +77,9 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
 
     @Override
     protected AbstractNioUnsafe newUnsafe() {
+        /**
+         * 创建NioByteUnsafe对象 也就是说NioSocketChannel对应的unsafe是NioByteUnsafe
+         */
         return new NioByteUnsafe();
     }
 
@@ -101,9 +104,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 if (isAllowHalfClosure(config())) {
                     shutdownInput();
                     pipeline.fireUserEventTriggered(ChannelInputShutdownEvent.INSTANCE);
-                } else {
-                    close(voidPromise());
-                }
+                } else close(voidPromise());
             } else {
                 inputClosedSeenErrorOnRead = true;
                 pipeline.fireUserEventTriggered(ChannelInputShutdownReadComplete.INSTANCE);
