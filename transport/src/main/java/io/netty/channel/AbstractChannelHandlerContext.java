@@ -357,16 +357,19 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelHandlerContext fireChannelRead(final Object msg) {
-        invokeChannelRead(findContextInbound(MASK_CHANNEL_READ), msg);
+        this.invokeChannelRead(this.findContextInbound(MASK_CHANNEL_READ), msg);
         return this;
     }
 
     static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
         final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
+        /**
+         * 第一次执行next 其实就是head节点
+         */
         EventExecutor executor = next.executor();
-        if (executor.inEventLoop()) {
+        if (executor.inEventLoop())
             next.invokeChannelRead(m);
-        } else {
+        else {
             executor.execute(new Runnable() {
                 @Override
                 public void run() {
@@ -381,6 +384,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             try {
                 ((ChannelInboundHandler) handler()).channelRead(this, msg);
             } catch (Throwable t) {
+                // 发生异常的时候在这进行捕获
                 invokeExceptionCaught(t);
             }
         } else {

@@ -31,7 +31,7 @@
 
 * [X]  pipeline创建
 * [X]  handler添加
-* [ ]  handler删除
+* [X]  handler删除
 * [ ]  传播inbound事件
 * [ ]  传播outbound事件
 * [ ]  传播异常事件
