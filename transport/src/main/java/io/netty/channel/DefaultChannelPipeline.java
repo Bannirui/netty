@@ -460,9 +460,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     private AbstractChannelHandlerContext remove(final AbstractChannelHandlerContext ctx) {
+        // 要删除的节点不能是head或者tail节点
         assert ctx != head && ctx != tail;
 
         synchronized (this) {
+            // 执行删除操作
             atomicRemoveFromHandlerList(ctx);
 
             // If the registered is false it means that the channel was not registered on an eventloop yet.
@@ -472,7 +474,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 callHandlerCallbackLater(ctx, false);
                 return ctx;
             }
-
+            // 回调删除handler事件
             EventExecutor executor = ctx.executor();
             if (!executor.inEventLoop()) {
                 executor.execute(new Runnable() {
@@ -636,8 +638,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         try {
             ctx.callHandlerRemoved();
         } catch (Throwable t) {
-            fireExceptionCaught(new ChannelPipelineException(
-                    ctx.handler().getClass().getName() + ".handlerRemoved() has thrown an exception.", t));
+            fireExceptionCaught(new ChannelPipelineException(ctx.handler().getClass().getName() + ".handlerRemoved() has thrown an exception.", t));
         }
     }
 
@@ -735,15 +736,12 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     @Override
     public final ChannelHandlerContext context(Class<? extends ChannelHandler> handlerType) {
         ObjectUtil.checkNotNull(handlerType, "handlerType");
-
+        // 从头节点开始遍历节点
         AbstractChannelHandlerContext ctx = head.next;
         for (;;) {
-            if (ctx == null) {
-                return null;
-            }
-            if (handlerType.isAssignableFrom(ctx.handler().getClass())) {
-                return ctx;
-            }
+            if (ctx == null) return null;
+            // 找到handler
+            if (handlerType.isAssignableFrom(ctx.handler().getClass())) return ctx;
             ctx = ctx.next;
         }
     }
