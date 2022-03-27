@@ -34,7 +34,7 @@
 * [X]  handler删除
 * [X]  传播inbound事件
 * [X]  传播outbound事件
-* [ ]  传播异常事件
+* [X]  传播异常事件
 
 ### ByteBuf
 
