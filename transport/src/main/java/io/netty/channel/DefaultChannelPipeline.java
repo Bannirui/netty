@@ -1245,7 +1245,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     final class TailContext extends AbstractChannelHandlerContext implements ChannelInboundHandler {
 
         TailContext(DefaultChannelPipeline pipeline) {
+            /**
+             * inbound处理器
+             */
             super(pipeline, null, TAIL_NAME, TailContext.class);
+            // 将当前节点设置为已添加
             setAddComplete();
         }
 
@@ -1302,6 +1306,15 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    /**
+     * 跟{@link TailContext}比较
+     * 同样继承了{@link AbstractChannelHandlerContext} 说明自身是一个HandlerContext
+     * 与{@link TailContext}不同的是 这里实现了{@link ChannelOutboundHandler}接口和{@link ChannelInboundHandler}接口 说明技能处理inbound事件又能处理outbound事件
+     *
+     * {@link HeadContext#handler()}方法返回自身 说明自身是一个handler
+     *
+     * 在构造方法中初始化了一个{@link Unsafe}类型的成员变量 是通过自身绑定的channel拿到的 说明这个类中可以进行对channel的读写操作
+     */
     final class HeadContext extends AbstractChannelHandlerContext implements ChannelOutboundHandler, ChannelInboundHandler {
 
         private final Unsafe unsafe;

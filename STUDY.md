@@ -29,7 +29,7 @@
 
 ### pipeline
 
-* [ ]  pipeline创建
+* [X]  pipeline创建
 * [ ]  pipeline添加
 * [ ]  pipeline删除
 * [ ]  传播inbound事件
