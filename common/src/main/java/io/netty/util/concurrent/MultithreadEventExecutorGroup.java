@@ -71,9 +71,8 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory, Object... args) {
         checkPositive(nThreads, "nThreads");
 
-        if (executor == null) {
+        if (executor == null)
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory()); // 构造一个executor线程执行器 这个线程池不是给NioEventLoopGroup使用的 而是给NioEventLoop使用的 每来一个任务就新建一个线程
-        }
 
         /**
          * 构建NioEventLoop
@@ -126,15 +125,13 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         final FutureListener<Object> terminationListener = new FutureListener<Object>() { // 设置一个listener用来监听线程池中的termination事件 给线程池中的每一个线程都设置这个listener 当监听到所有线程都terminate以后 这个线程池就算真正的terminate了
             @Override
             public void operationComplete(Future<Object> future) throws Exception {
-                if (terminatedChildren.incrementAndGet() == children.length) {
+                if (terminatedChildren.incrementAndGet() == children.length)
                     terminationFuture.setSuccess(null);
-                }
             }
         };
 
-        for (EventExecutor e: children) {
+        for (EventExecutor e: children)
             e.terminationFuture().addListener(terminationListener);
-        }
 
         Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
         Collections.addAll(childrenSet, children);

@@ -27,6 +27,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
+import io.netty.channel.nio.AbstractNioMessageChannel;
 import io.netty.util.AttributeKey;
 import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.logging.InternalLogger;
@@ -201,6 +202,9 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         @Override
         @SuppressWarnings("unchecked")
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            /**
+             * msg参数就是在{@link AbstractNioMessageChannel#read()}方法中调用{@code pipeline.fireChannelRead(readBuf.get(i))}方法的入参NioSocketChannel
+             */
             final Channel child = (Channel) msg;
 
             child.pipeline().addLast(childHandler);
@@ -209,6 +213,11 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             setAttributes(child, childAttrs);
 
             try {
+                /**
+                 * childGroup是初始化的work线程
+                 * worker线程注册channel
+                 * 这里的register()方法跟boss线程一样 通过next()方法选择一个线程进行注册
+                 */
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {

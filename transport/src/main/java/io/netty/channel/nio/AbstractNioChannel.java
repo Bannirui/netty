@@ -380,8 +380,11 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             try {
                 /**
                  * jdk底层的注册方法
+                 * 第一个参数为selector
+                 * 第二个参数表示不关心任何事件
+                 * jdk中channel的register方法 将SocketChannel或者ServerSocketChannel注册到selector中 这里监听集合设置为0 也就是什么都不监听->后续有地方会需要修改这个selectionKey的监听集合
                  */
-                selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this); // jdk中channel的register方法 将SocketChannel或者ServerSocketChannel注册到selector中 这里监听集合设置为0 也就是什么都不监听->后续有地方会需要修改这个selectionKey的监听集合
+                selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {
                 if (!selected) {

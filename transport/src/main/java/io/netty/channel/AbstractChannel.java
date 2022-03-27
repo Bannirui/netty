@@ -521,8 +521,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 boolean firstRegistration = neverRegistered;
                 /**
                  * 实际的注册
+                 * jdk底层操作 将channel注册到selector上
                  */
-                AbstractChannel.this.doRegister(); // jdk底层操作 将channel注册到selector上
+                AbstractChannel.this.doRegister();
                 neverRegistered = false;
                 registered = true;
 
@@ -530,8 +531,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // user may already fire events through the pipeline in the ChannelFutureListener.
                 /**
                  * 触发事件
+                 * 涉及到ChannelInitializer::init()方法将ChannelInitializer内部添加的handlers添加到pipeline中
                  */
-                pipeline.invokeHandlerAddedIfNeeded(); // 涉及到ChannelInitializer::init()方法将ChannelInitializer内部添加的handlers添加到pipeline中
+                pipeline.invokeHandlerAddedIfNeeded();
 
                 safeSetSuccess(promise); // 设置当前promise状态为success 当前register()方法是在eventLoop中的线程中执行的 需要通知提交register操作的那个线程
                 /**

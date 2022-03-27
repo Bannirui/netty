@@ -24,7 +24,7 @@
 * [X]  初始化NioSocketChannelConfig
 * [X]  处理接入事件handler的创建
 * [X]  NioSocketChannel的创建
-* [ ]  NioSocketChannel注册到selector
+* [X]  NioSocketChannel注册到selector
 * [ ]  监听读写事件
 
 ### pipeline
