@@ -65,13 +65,16 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
     }
 
-    static final ResourceLeakDetector<ByteBuf> leakDetector =
-            ResourceLeakDetectorFactory.instance().newResourceLeakDetector(ByteBuf.class);
-
+    static final ResourceLeakDetector<ByteBuf> leakDetector = ResourceLeakDetectorFactory.instance().newResourceLeakDetector(ByteBuf.class);
+    // 读指针
     int readerIndex;
+    // 写指针
     int writerIndex;
+    // 保存读指针
     private int markedReaderIndex;
+    // 报讯写指针
     private int markedWriterIndex;
+    // 最大分配容量
     private int maxCapacity;
 
     protected AbstractByteBuf(int maxCapacity) {
@@ -277,7 +280,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf ensureWritable(int minWritableBytes) {
-        ensureWritable0(checkPositiveOrZero(minWritableBytes, "minWritableBytes"));
+        this.ensureWritable0(checkPositiveOrZero(minWritableBytes, "minWritableBytes"));
         return this;
     }
 
@@ -291,15 +294,13 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
         if (checkBounds && (targetCapacity < 0 || targetCapacity > maxCapacity)) {
             ensureAccessible();
-            throw new IndexOutOfBoundsException(String.format(
-                    "writerIndex(%d) + minWritableBytes(%d) exceeds maxCapacity(%d): %s",
-                    writerIndex, minWritableBytes, maxCapacity, this));
+            throw new IndexOutOfBoundsException(String.format("writerIndex(%d) + minWritableBytes(%d) exceeds maxCapacity(%d): %s", writerIndex, minWritableBytes, maxCapacity, this));
         }
 
         // Normalize the target capacity to the power of 2.
         final int fastWritable = maxFastWritableBytes();
-        int newCapacity = fastWritable >= minWritableBytes ? writerIndex + fastWritable
-                : alloc().calculateNewCapacity(targetCapacity, maxCapacity);
+        // 自动扩容
+        int newCapacity = fastWritable >= minWritableBytes ? writerIndex + fastWritable : alloc().calculateNewCapacity(targetCapacity, maxCapacity);
 
         // Adjust to the new capacity.
         capacity(newCapacity);

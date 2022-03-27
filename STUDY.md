@@ -38,7 +38,7 @@
 
 ### ByteBuf
 
-* [ ]  AbstractByteBuf
+* [X]  AbstractByteBuf
 * [ ]  ByteBuf分类
 * [ ]  缓冲区分配器
 * [ ]  PooledByteBufAllocator

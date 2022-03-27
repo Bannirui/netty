@@ -16,13 +16,13 @@
 
 package io.netty.buffer;
 
-import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
-
 import io.netty.util.ResourceLeakDetector;
 import io.netty.util.ResourceLeakTracker;
 import io.netty.util.internal.MathUtil;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.StringUtil;
+
+import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 
 /**
  * Skeletal {@link ByteBufAllocator} implementation to extend.
@@ -248,28 +248,26 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         return StringUtil.simpleClassName(this) + "(directByDefault: " + directByDefault + ')';
     }
 
+    /**
+     * 如果小于阈值4M 采用倍增的方式
+     * 如果大于阈值4M 采用平移4M的方式
+     */
     @Override
     public int calculateNewCapacity(int minNewCapacity, int maxCapacity) {
         checkPositiveOrZero(minNewCapacity, "minNewCapacity");
-        if (minNewCapacity > maxCapacity) {
-            throw new IllegalArgumentException(String.format(
-                    "minNewCapacity: %d (expected: not greater than maxCapacity(%d)",
-                    minNewCapacity, maxCapacity));
-        }
+        if (minNewCapacity > maxCapacity)
+            throw new IllegalArgumentException(String.format("minNewCapacity: %d (expected: not greater than maxCapacity(%d)", minNewCapacity, maxCapacity));
+        // 阈值为4M
         final int threshold = CALCULATE_THRESHOLD; // 4 MiB page
-
-        if (minNewCapacity == threshold) {
-            return threshold;
-        }
-
+        // 最小需要扩容内存==阈值
+        if (minNewCapacity == threshold) return threshold;
         // If over threshold, do not double but just increase by threshold.
-        if (minNewCapacity > threshold) {
+        if (minNewCapacity > threshold) { // 最小需要扩容内存>阈值
+            // newCapacity为需要扩容内存
             int newCapacity = minNewCapacity / threshold * threshold;
-            if (newCapacity > maxCapacity - threshold) {
-                newCapacity = maxCapacity;
-            } else {
-                newCapacity += threshold;
-            }
+            // 目标容量+阈值>最大容量
+            if (newCapacity > maxCapacity - threshold) newCapacity = maxCapacity;
+            else newCapacity += threshold; // 目标容量+阈值
             return newCapacity;
         }
 
