@@ -303,6 +303,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     @Override
     public ChannelFuture write(Object msg) {
+        /**
+         * pipelie是{@link DefaultChannelPipeline}
+         */
         return pipeline.write(msg);
     }
 

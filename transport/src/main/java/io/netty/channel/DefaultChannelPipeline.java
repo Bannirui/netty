@@ -1012,6 +1012,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelFuture write(Object msg) {
+        /**
+         * 从tail节点开始 从最后的节点开始往前写
+         * {@code write())方法最终会调用{@link AbstractChannelHandlerContext#write(Object)}方法
+         */
         return tail.write(msg);
     }
 

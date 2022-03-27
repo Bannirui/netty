@@ -696,22 +696,20 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelFuture write(Object msg) {
-        return write(msg, newPromise());
+        return this.write(msg, newPromise());
     }
 
     @Override
     public ChannelFuture write(final Object msg, final ChannelPromise promise) {
-        write(msg, false, promise);
+        this.write(msg, false, promise);
 
         return promise;
     }
 
     void invokeWrite(Object msg, ChannelPromise promise) {
-        if (invokeHandler()) {
-            invokeWrite0(msg, promise);
-        } else {
-            write(msg, promise);
-        }
+        if (invokeHandler()) this.invokeWrite0(msg, promise);
+        else this.write(msg, promise);
+
     }
 
     private void invokeWrite0(Object msg, ChannelPromise promise) {
@@ -782,15 +780,19 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             ReferenceCountUtil.release(msg);
             throw e;
         }
-
-        final AbstractChannelHandlerContext next = findContextOutbound(flush ?
-                (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
+        /**
+         * {@code findContextOutbound()}方法是获取上一个标注outbound事件的HandlerContext
+         */
+        final AbstractChannelHandlerContext next = findContextOutbound(flush ? (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
         final Object m = pipeline.touch(msg, next);
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
             if (flush) {
                 next.invokeWriteAndFlush(m, promise);
             } else {
+                /**
+                 * 没有调用flush
+                 */
                 next.invokeWrite(m, promise);
             }
         } else {
