@@ -51,7 +51,7 @@
 
 ### 解码器
 
-* [ ]  ByteToMessageDecoder
+* [X]  ByteToMessageDecoder
 * [ ]  固定长度解码器
 * [ ]  行解码器
 * [ ]  分隔符解码器
