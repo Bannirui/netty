@@ -1031,6 +1031,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelFuture writeAndFlush(Object msg) {
+        // 从tail节点开始传播
         return tail.writeAndFlush(msg);
     }
 

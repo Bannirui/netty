@@ -678,6 +678,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     private void invokeWrite0(Object msg, ChannelPromise promise) {
         try {
+            /**
+             * 调用当前handler的<tt>write()</tt>方法
+             * 如果当前handler的<tt>write()</tt>方法是继续往下传播 会继续传播写事件 直到传播到head节点 最后会走到HeadContext的<tt>write()</tt>方法
+             *
+             * 最终执行写入操作的是当前channel的unsafe对象将当前消息写入到缓存中
+             */
             ((ChannelOutboundHandler) handler()).write(this, msg, promise);
         } catch (Throwable t) {
             notifyOutboundHandlerException(t, promise);
@@ -709,6 +715,9 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         }
     }
 
+    /**
+     * 调用当前handler的<tt>flush()</tt>方法 如果当前handler的flush方法是继续传播flush事件 则flush事件会继续往下传播 直到最后会调用head节点的flush方法
+     */
     private void invokeFlush0() {
         try {
             ((ChannelOutboundHandler) handler()).flush(this);
@@ -719,16 +728,18 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
-        write(msg, true, promise);
+        this.write(msg, true, promise);
         return promise;
     }
 
     void invokeWriteAndFlush(Object msg, ChannelPromise promise) {
         if (invokeHandler()) {
-            invokeWrite0(msg, promise);
-            invokeFlush0();
+            // 写入
+            this.invokeWrite0(msg, promise);
+            // 刷新
+            this.invokeFlush0();
         } else {
-            writeAndFlush(msg, promise);
+            this.writeAndFlush(msg, promise);
         }
     }
 
@@ -745,7 +756,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             throw e;
         }
         /**
-         * {@code findContextOutbound()}方法是获取上一个标注outbound事件的HandlerContext
+         * {@code findContextOutbound()}方法是获取上一个标注outbound事件的HandlerContext 最后直到head节点结束
          */
         final AbstractChannelHandlerContext next = findContextOutbound(flush ? (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
         final Object m = pipeline.touch(msg, next);
@@ -773,7 +784,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelFuture writeAndFlush(Object msg) {
-        return writeAndFlush(msg, newPromise());
+        return this.writeAndFlush(msg, newPromise());
     }
 
     private static void notifyOutboundHandlerException(Throwable cause, ChannelPromise promise) {
