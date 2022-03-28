@@ -15,12 +15,12 @@
  */
 package io.netty.handler.codec;
 
-import static io.netty.util.internal.ObjectUtil.checkPositive;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.util.List;
+
+import static io.netty.util.internal.ObjectUtil.checkPositive;
 
 /**
  * A decoder that splits the received {@link ByteBuf}s by the fixed number
@@ -38,8 +38,13 @@ import java.util.List;
  * +-----+-----+-----+
  * </pre>
  */
+
+/**
+ * 固定长度解码器
+ */
 public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
 
+    // 长度大小
     private final int frameLength;
 
     /**
@@ -49,15 +54,17 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
      */
     public FixedLengthFrameDecoder(int frameLength) {
         checkPositive(frameLength, "frameLength");
+        // 保存属性 长度大小
         this.frameLength = frameLength;
     }
 
     @Override
     protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-        Object decoded = decode(ctx, in);
-        if (decoded != null) {
-            out.add(decoded);
-        }
+        /**
+         * 通过ByteBuf解码 将解码得到的对象添加到out上
+         */
+        Object decoded = this.decode(ctx, in);
+        if (decoded != null) out.add(decoded);
     }
 
     /**
@@ -68,12 +75,8 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
      * @return  frame           the {@link ByteBuf} which represent the frame or {@code null} if no frame could
      *                          be created.
      */
-    protected Object decode(
-            @SuppressWarnings("UnusedParameters") ChannelHandlerContext ctx, ByteBuf in) throws Exception {
-        if (in.readableBytes() < frameLength) {
-            return null;
-        } else {
-            return in.readRetainedSlice(frameLength);
-        }
+    protected Object decode(@SuppressWarnings("UnusedParameters") ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        if (in.readableBytes() < frameLength) return null;
+        else return in.readRetainedSlice(frameLength); // 从当前累加器中截取这个长度的数值
     }
 }
