@@ -143,9 +143,8 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf setIndex(int readerIndex, int writerIndex) {
-        if (checkBounds) {
+        if (checkBounds)
             checkIndexBounds(readerIndex, writerIndex, capacity());
-        }
         setIndex0(readerIndex, writerIndex);
         return this;
     }

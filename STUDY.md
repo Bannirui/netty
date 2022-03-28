@@ -39,7 +39,7 @@
 ### ByteBuf
 
 * [X]  AbstractByteBuf
-* [ ]  ByteBuf分类
+* [X]  ByteBuf分类
 * [ ]  缓冲区分配器
 * [ ]  PooledByteBufAllocator
 * [ ]  directArena分配缓冲区

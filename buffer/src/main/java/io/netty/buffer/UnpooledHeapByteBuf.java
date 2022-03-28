@@ -50,13 +50,10 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
     public UnpooledHeapByteBuf(ByteBufAllocator alloc, int initialCapacity, int maxCapacity) {
         super(maxCapacity);
 
-        if (initialCapacity > maxCapacity) {
-            throw new IllegalArgumentException(String.format(
-                    "initialCapacity(%d) > maxCapacity(%d)", initialCapacity, maxCapacity));
-        }
-
+        if (initialCapacity > maxCapacity)
+            throw new IllegalArgumentException(String.format("initialCapacity(%d) > maxCapacity(%d)", initialCapacity, maxCapacity));
         this.alloc = checkNotNull(alloc, "alloc");
-        setArray(allocateArray(initialCapacity));
+        setArray(this.allocateArray(initialCapacity));
         setIndex(0, 0);
     }
 
@@ -68,17 +65,12 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
      */
     protected UnpooledHeapByteBuf(ByteBufAllocator alloc, byte[] initialArray, int maxCapacity) {
         super(maxCapacity);
-
         checkNotNull(alloc, "alloc");
         checkNotNull(initialArray, "initialArray");
-        if (initialArray.length > maxCapacity) {
-            throw new IllegalArgumentException(String.format(
-                    "initialCapacity(%d) > maxCapacity(%d)", initialArray.length, maxCapacity));
-        }
-
+        if (initialArray.length > maxCapacity) throw new IllegalArgumentException(String.format("initialCapacity(%d) > maxCapacity(%d)", initialArray.length, maxCapacity));
         this.alloc = alloc;
-        setArray(initialArray);
-        setIndex(0, initialArray.length);
+        this.setArray(initialArray);
+        super.setIndex(0, initialArray.length);
     }
 
     protected byte[] allocateArray(int initialCapacity) {
