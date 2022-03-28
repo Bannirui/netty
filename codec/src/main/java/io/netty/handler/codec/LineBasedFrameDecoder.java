@@ -33,16 +33,38 @@ import java.util.List;
  * <p>
  * For a more general delimiter-based decoder, see {@link DelimiterBasedFrameDecoder}.
  */
+
+/**
+ * 行解码器
+ * 以\r\n或者直接以\n结尾进行解码
+ * 以换行符为分隔进行解析
+ */
 public class LineBasedFrameDecoder extends ByteToMessageDecoder {
 
     /** Maximum length of a frame we're willing to decode.  */
+    /**
+     * 数据包的最大长度
+     * 超过该长度会进行丢弃模式
+     */
     private final int maxLength;
     /** Whether or not to throw an exception as soon as we exceed maxLength. */
+    /**
+     * 超过最大长度是否要抛出异常
+     */
     private final boolean failFast;
+    /**
+     * 最终解析到的数据包是否带有换行符
+     */
     private final boolean stripDelimiter;
 
     /** True if we're discarding input because we're already over maxLength.  */
+    /**
+     * 为{@code true}说明当前解码过程为丢弃模式
+     */
     private boolean discarding;
+    /**
+     * 丢弃了多少字节
+     */
     private int discardedBytes;
 
     /** Last scan position. */
@@ -81,10 +103,12 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
 
     @Override
     protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-        Object decoded = decode(ctx, in);
-        if (decoded != null) {
-            out.add(decoded);
-        }
+        /**
+         * 调用当前类的固定长度解码算法
+         * 将解析结果放到out中
+         */
+        Object decoded = this.decode(ctx, in);
+        if (decoded != null) out.add(decoded);
     }
 
     /**
@@ -96,52 +120,93 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
      *                          be created.
      */
     protected Object decode(ChannelHandlerContext ctx, ByteBuf buffer) throws Exception {
+        // 找到行尾
         final int eol = findEndOfLine(buffer);
         if (!discarding) {
             if (eol >= 0) {
                 final ByteBuf frame;
+                // 从换行符到可读字节之间的长度
                 final int length = eol - buffer.readerIndex();
+                /**
+                 * 拿到分隔符长度
+                 * 如果是以\r\n结尾的 分隔符长度就是2
+                 * 如果是以\n结尾的 分隔符长度就是1
+                 */
                 final int delimLength = buffer.getByte(eol) == '\r'? 2 : 1;
-
+                /**
+                 * 如果长度大于最大长度
+                 * 指向换行符之后的可读字节 将前面一段数据直接丢弃
+                 * 传播异常事件
+                 */
                 if (length > maxLength) {
                     buffer.readerIndex(eol + delimLength);
                     fail(ctx, length);
                     return null;
                 }
 
+                /**
+                 * 解析到的数据是有效的 判定是否要将分隔符算在完整的数据包中
+                 *
+                 * stripDelimiter为true表示丢弃分隔符
+                 */
                 if (stripDelimiter) {
+                    // 截取有效长度
                     frame = buffer.readRetainedSlice(length);
+                    // 跳过分隔符的字节
                     buffer.skipBytes(delimLength);
                 } else {
+                    // 包含分隔符
                     frame = buffer.readRetainedSlice(length + delimLength);
                 }
 
                 return frame;
             } else {
+                /**
+                 * 数据包中没有找到分隔符 也就是非丢弃模式
+                 *
+                 * 计算可读字节长度
+                 */
                 final int length = buffer.readableBytes();
                 if (length > maxLength) {
+                    /**
+                     * 可读字节长度超过了最大字节长度
+                     * 将当前长度标记为可丢弃的
+                     */
                     discardedBytes = length;
+                    // 直接将读指针移动到写指针
                     buffer.readerIndex(buffer.writerIndex());
+                    // 标记为丢弃模式
                     discarding = true;
                     offset = 0;
                     if (failFast) {
+                        // 超出最大长度抛出异常
                         fail(ctx, "over " + discardedBytes);
                     }
                 }
                 return null;
             }
-        } else {
+        } else { // 丢弃模式
             if (eol >= 0) {
+                /**
+                 * 找到分隔符
+                 * 当前丢弃的字节 前面已经丢弃的+现在丢弃的位置-写指针
+                 */
                 final int length = discardedBytes + eol - buffer.readerIndex();
+                // 当前换行符的长度
                 final int delimLength = buffer.getByte(eol) == '\r'? 2 : 1;
                 buffer.readerIndex(eol + delimLength);
+                // 当前丢弃的字节为0
                 discardedBytes = 0;
+                // 设置为未丢弃模式
                 discarding = false;
+                // 丢弃完字节之后触发异常
                 if (!failFast) {
                     fail(ctx, length);
                 }
             } else {
+                // 累计已经丢弃的字节数+当前可读的长度
                 discardedBytes += buffer.readableBytes();
+                // 移动
                 buffer.readerIndex(buffer.writerIndex());
                 // We skip everything in the buffer, we need to set the offset to 0 again.
                 offset = 0;
