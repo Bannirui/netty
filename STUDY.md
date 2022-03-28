@@ -40,7 +40,7 @@
 
 * [X]  AbstractByteBuf
 * [X]  ByteBuf分类
-* [ ]  缓冲区分配器
+* [X]  缓冲区分配器
 * [ ]  PooledByteBufAllocator
 * [ ]  directArena分配缓冲区
 * [ ]  命中缓存

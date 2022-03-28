@@ -104,10 +104,9 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
 
     @Override
     public ByteBuf buffer() {
-        if (directByDefault) {
-            return directBuffer();
-        }
-        return heapBuffer();
+        if (directByDefault)
+            return this.directBuffer();
+        return this.heapBuffer();
     }
 
     @Override
@@ -152,7 +151,7 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
 
     @Override
     public ByteBuf heapBuffer() {
-        return heapBuffer(DEFAULT_INITIAL_CAPACITY, DEFAULT_MAX_CAPACITY);
+        return this.heapBuffer(DEFAULT_INITIAL_CAPACITY, DEFAULT_MAX_CAPACITY);
     }
 
     @Override
@@ -162,16 +161,16 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
 
     @Override
     public ByteBuf heapBuffer(int initialCapacity, int maxCapacity) {
-        if (initialCapacity == 0 && maxCapacity == 0) {
+        if (initialCapacity == 0 && maxCapacity == 0)
             return emptyBuf;
-        }
+        // 参数校验
         validate(initialCapacity, maxCapacity);
-        return newHeapBuffer(initialCapacity, maxCapacity);
+        return this.newHeapBuffer(initialCapacity, maxCapacity);
     }
 
     @Override
     public ByteBuf directBuffer() {
-        return directBuffer(DEFAULT_INITIAL_CAPACITY, DEFAULT_MAX_CAPACITY);
+        return this.directBuffer(DEFAULT_INITIAL_CAPACITY, DEFAULT_MAX_CAPACITY);
     }
 
     @Override
@@ -181,11 +180,11 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
 
     @Override
     public ByteBuf directBuffer(int initialCapacity, int maxCapacity) {
-        if (initialCapacity == 0 && maxCapacity == 0) {
+        if (initialCapacity == 0 && maxCapacity == 0)
             return emptyBuf;
-        }
+        // 参数验证
         validate(initialCapacity, maxCapacity);
-        return newDirectBuffer(initialCapacity, maxCapacity);
+        return this.newDirectBuffer(initialCapacity, maxCapacity);
     }
 
     @Override
@@ -226,11 +225,8 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
 
     private static void validate(int initialCapacity, int maxCapacity) {
         checkPositiveOrZero(initialCapacity, "initialCapacity");
-        if (initialCapacity > maxCapacity) {
-            throw new IllegalArgumentException(String.format(
-                    "initialCapacity: %d (expected: not greater than maxCapacity(%d)",
-                    initialCapacity, maxCapacity));
-        }
+        if (initialCapacity > maxCapacity)
+            throw new IllegalArgumentException(String.format("initialCapacity: %d (expected: not greater than maxCapacity(%d)", initialCapacity, maxCapacity));
     }
 
     /**
