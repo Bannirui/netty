@@ -58,8 +58,8 @@
 
 ### 编码器和写数据
 
-* [ ]  writeAndFlush事件传播
-* [ ]  MessageToByteEncoder
+* [X]  writeAndFlush事件传播
+* [X]  MessageToByteEncoder
 * [ ]  写buffer队列
 * [ ]  刷新buffer队列
 * [ ]  Future和Promise

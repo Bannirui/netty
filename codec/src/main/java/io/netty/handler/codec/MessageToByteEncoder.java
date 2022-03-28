@@ -99,16 +99,34 @@ public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdap
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
         ByteBuf buf = null;
         try {
-            if (acceptOutboundMessage(msg)) {
+            /**
+             * 判断当前对象是否可处理
+             * 如果可处理 就进行处理
+             * 如果不可以处理 就通过<tt>ctx.write()</tt>方法继续传递write事件
+             */
+            if (acceptOutboundMessage(msg)) { // 判断当前对象可处理
                 @SuppressWarnings("unchecked")
-                I cast = (I) msg;
+                I cast = (I) msg; // 类型强转
+                /**
+                 * 缓冲区分配
+                 * 直接通过ctx的内存分配器进行内存分配
+                 * 通过判断preferDirect来分配堆内存或者堆外内存 默认情况是分配堆外内存
+                 */
                 buf = allocateBuffer(ctx, cast, preferDirect);
                 try {
-                    encode(ctx, cast, buf);
+                    /**
+                     * 进行编码 该方法是抽象方法 具体实现交给子类
+                     */
+                    this.encode(ctx, cast, buf);
                 } finally {
+                    // 编码完成后 通过该方法释放cast对象
                     ReferenceCountUtil.release(cast);
                 }
-
+                /**
+                 * 判断buf是否有可读字节
+                 * 如果有可读字节 则继续传递write事件
+                 * 如果没有可读字节 就将buf进行释放 然后继续传播write事件 传递了一个空的ByteBuf 最后将buf设置为空
+                 */
                 if (buf.isReadable()) {
                     ctx.write(buf, promise);
                 } else {
