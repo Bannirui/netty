@@ -274,16 +274,15 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
     protected final Object filterOutboundMessage(Object msg) {
         if (msg instanceof ByteBuf) {
             ByteBuf buf = (ByteBuf) msg;
-            if (buf.isDirect()) {
-                return msg;
-            }
-
-            return newDirectBuffer(buf);
+            /**
+             * 是堆外内存就直接返回
+             * 不是堆外内存就通过调用<tt>newDirectBuffer()</tt>方法转换为堆外内存
+             */
+            if (buf.isDirect()) return msg;
+            return super.newDirectBuffer(buf);
         }
 
-        if (msg instanceof FileRegion) {
-            return msg;
-        }
+        if (msg instanceof FileRegion) return msg;
 
         throw new UnsupportedOperationException(
                 "unsupported message type: " + StringUtil.simpleClassName(msg) + EXPECTED_TYPES);

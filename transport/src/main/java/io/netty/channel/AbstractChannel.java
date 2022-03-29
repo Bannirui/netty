@@ -899,7 +899,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         @Override
         public final void write(Object msg, ChannelPromise promise) {
             assertEventLoop();
-
+            // 负责缓冲写进来的byteBuf
             ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
             if (outboundBuffer == null) {
                 try {
@@ -910,14 +910,17 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     // need to fail the future right away. If it is not null the handling of the rest
                     // will be done in flush0()
                     // See https://github.com/netty/netty/issues/2362
-                    safeSetFailure(promise,
-                            newClosedChannelException(initialCloseCause, "write(Object, ChannelPromise)"));
+                    safeSetFailure(promise, newClosedChannelException(initialCloseCause, "write(Object, ChannelPromise)"));
                 }
                 return;
             }
 
             int size;
             try {
+                /**
+                 * 非堆外内存转换为堆外内存
+                 * 最终实现在{@link AbstractNioByteChannel#filterOutboundMessage(Object)}
+                 */
                 msg = filterOutboundMessage(msg);
                 size = pipeline.estimatorHandle().size(msg);
                 if (size < 0) {
@@ -931,7 +934,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 }
                 return;
             }
-
+            // 插入写队列
             outboundBuffer.addMessage(msg, size, promise);
         }
 

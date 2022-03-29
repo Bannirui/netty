@@ -60,6 +60,6 @@
 
 * [X]  writeAndFlush事件传播
 * [X]  MessageToByteEncoder
-* [ ]  写buffer队列
+* [X]  写buffer队列
 * [ ]  刷新buffer队列
 * [ ]  Future和Promise
