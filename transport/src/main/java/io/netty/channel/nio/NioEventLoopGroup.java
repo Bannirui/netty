@@ -104,10 +104,14 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // nettyçš„çº
         super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());
     }
 
-    public NioEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory,
-                             final SelectorProvider selectorProvider,
-                             final SelectStrategyFactory selectStrategyFactory,
-                             final RejectedExecutionHandler rejectedExecutionHandler) {
+    public NioEventLoopGroup(
+            int nThreads,
+            Executor executor,
+            EventExecutorChooserFactory chooserFactory,
+            final SelectorProvider selectorProvider,
+            final SelectStrategyFactory selectStrategyFactory,
+            final RejectedExecutionHandler rejectedExecutionHandler
+    ) {
         super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory, rejectedExecutionHandler);
     }
 

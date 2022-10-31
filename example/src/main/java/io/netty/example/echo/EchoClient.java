@@ -35,7 +35,7 @@ public final class EchoClient {
         try {
             Bootstrap b = new Bootstrap(); // 创建客户端实例
             b.group(group)
-             .channel(NioSocketChannel.class)
+             .channel(NioSocketChannel.class) // 根据NioSocketChannel创建了ChannelFactory->在下面connect()时机->ChannelFactory创建NioSocketChannel实例创建
              .option(ChannelOption.TCP_NODELAY, true)
              .handler(new ChannelInitializer<SocketChannel>() {
                  @Override

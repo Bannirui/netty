@@ -28,13 +28,6 @@ import io.netty.util.CharsetUtil;
  */
 public class EchoClientHandler extends ChannelInboundHandlerAdapter {
 
-    /**
-     * @author dingrui
-     * @since 2022/2/9
-     * @param ctx:
-     * @return void
-     * @description 客户端连接服务器后
-     */
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         System.out.println("客户端连接服务端成功");
@@ -42,26 +35,11 @@ public class EchoClientHandler extends ChannelInboundHandlerAdapter {
         ctx.writeAndFlush(Unpooled.copiedBuffer("hello, this is client", CharsetUtil.UTF_8));
     }
 
-    /**
-     * @author dingrui
-     * @since 2022/2/9
-     * @param ctx:
-     * @param msg:
-     * @return void
-     * @description 接收数据后
-     */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         System.out.println("客户端收到数据 msg=" + ((ByteBuf) msg).toString(CharsetUtil.UTF_8));
     }
 
-    /**
-     * @author dingrui
-     * @since 2022/2/9
-     * @param ctx:
-     * @return void
-     * @description 完成后
-     */
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) {
         ctx.flush();

@@ -16,7 +16,6 @@
 
 package io.netty.channel;
 
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.StringUtil;
 
 import java.lang.reflect.Constructor;
@@ -29,7 +28,6 @@ public class ReflectiveChannelFactory<T extends Channel> implements ChannelFacto
     private final Constructor<? extends T> constructor;
 
     public ReflectiveChannelFactory(Class<? extends T> clazz) {
-        ObjectUtil.checkNotNull(clazz, "clazz");
         try {
             this.constructor = clazz.getConstructor(); // NioServerSocket的class对象
         } catch (NoSuchMethodException e) {

@@ -34,9 +34,9 @@ import java.net.SocketAddress;
  * A channel provides a user:
  * <ul>
  * <li>the current state of the channel (e.g. is it open? is it connected?),</li>
- * <li>the {@linkplain ChannelConfig configuration parameters} of the channel (e.g. receive buffer size),</li>
+ * <li>the {@linkplain io.netty.channel.ChannelConfig configuration parameters} of the channel (e.g. receive buffer size),</li>
  * <li>the I/O operations that the channel supports (e.g. read, write, connect, and bind), and</li>
- * <li>the {@link ChannelPipeline} which handles all I/O events and requests
+ * <li>the {@link io.netty.channel.ChannelPipeline} which handles all I/O events and requests
  *     associated with the channel.</li>
  * </ul>
  *
@@ -45,7 +45,7 @@ import java.net.SocketAddress;
  * All I/O operations in Netty are asynchronous.  It means any I/O calls will
  * return immediately with no guarantee that the requested I/O operation has
  * been completed at the end of the call.  Instead, you will be returned with
- * a {@link ChannelFuture} instance which will notify you when the requested I/O
+ * a {@link io.netty.channel.ChannelFuture} instance which will notify you when the requested I/O
  * operation has succeeded, failed, or canceled.
  *
  * <h3>Channels are hierarchical</h3>
@@ -73,6 +73,11 @@ import java.net.SocketAddress;
  * It is important to call {@link #close()} or {@link #close(ChannelPromise)} to release all
  * resources once you are done with the {@link Channel}. This ensures all resources are
  * released in a proper way, i.e. filehandles.
+ */
+
+/**
+ * netty没有使用java中的{@link java.nio.channels.ServerSocketChannel}和{@link java.nio.channels.SocketChannel}
+ * 而是自己封装了与之对应的实现{@link io.netty.channel.socket.nio.NioServerSocketChannel}和{@link io.netty.channel.socket.nio.NioSocketChannel}
  */
 public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparable<Channel> {
 

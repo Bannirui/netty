@@ -15,8 +15,6 @@
  */
 package io.netty.util.concurrent;
 
-import io.netty.util.internal.ObjectUtil;
-
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 
@@ -24,7 +22,7 @@ public final class ThreadPerTaskExecutor implements Executor { // 只有一个ex
     private final ThreadFactory threadFactory;
 
     public ThreadPerTaskExecutor(ThreadFactory threadFactory) {
-        this.threadFactory = ObjectUtil.checkNotNull(threadFactory, "threadFactory");
+        this.threadFactory = threadFactory;
     }
 
     @Override

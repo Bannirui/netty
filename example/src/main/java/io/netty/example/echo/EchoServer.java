@@ -62,7 +62,7 @@ public final class EchoServer {
             ServerBootstrap b = new ServerBootstrap(); // 创建服务端实例
             b
                     .group(bossGroup, workerGroup) // 初始化boss和worker线程池
-                    .channel(NioServerSocketChannel.class) // Netty中的channel没有使用java原生的ServerSocketChannel和SocketChannel 而是封装了与之对应的NioServerSocketChannel和NioSocketChannel
+                    .channel(NioServerSocketChannel.class) // 提供NioServerSocketChannel创建ChannelFactory->在下面bind()时机->ChannelFactory创建NioServerSocketChannel实例
                     .option(ChannelOption.SO_BACKLOG, 100)
                     .handler(new LoggingHandler(LogLevel.INFO)) // 指定LoggingHandler 这个handler是给服务端收到新的请求的时候处理用的
                     .childHandler(new ChannelInitializer<SocketChannel>() { // childHandler指定的handlers是给新创建的连接用的 服务端ServerSocketChannel在accept一个连接以后需要创建SocketChannel的实例 childHandler中设置的handler就是用于处理新创建的SocketChannel的 而不是用来处理ServerSocketChannel实例的

@@ -17,6 +17,8 @@
 package io.netty.bootstrap;
 
 import io.netty.channel.*;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.GlobalEventExecutor;
@@ -48,6 +50,17 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     private static final Map.Entry<AttributeKey<?>, Object>[] EMPTY_ATTRIBUTE_ARRAY = new Map.Entry[0];
 
     volatile EventLoopGroup group;
+
+    /**
+     * Channel创建工厂->内部阈维护了xxxChannel的默认构造器->触发时机->{@link AbstractBootstrap#initAndRegister()}->newInstance()方式创建xxxChannel实例
+     *
+     * {@link NioServerSocketChannel#NioServerSocketChannel()}->创建服务端Chanel实例
+     * {@link NioSocketChannel#NioSocketChannel()}->创建客户端Channel实例
+     *
+     * 触发时机分别为:
+     * 服务端{@link ServerBootstrap#bind()}
+     * 客户端{@link Bootstrap#connect()}
+     */
     @SuppressWarnings("deprecation")
     private volatile ChannelFactory<? extends C> channelFactory;
     private volatile SocketAddress localAddress;
@@ -56,6 +69,10 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     // purposes.
     private final Map<ChannelOption<?>, Object> options = new LinkedHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> attrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
+
+    /**
+     * 作用在bossGroup 监听{@link Channel}的状态变更和动作
+     */
     private volatile ChannelHandler handler;
 
     AbstractBootstrap() {
@@ -78,7 +95,6 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * {@link Channel}
      */
     public B group(EventLoopGroup group) {
-        ObjectUtil.checkNotNull(group, "group");
         if (this.group != null) throw new IllegalStateException("group set already");
         this.group = group; // group属性赋值为EventLoopGroup实例 服务端ServerBootstrap传进来的是bossGroup 客户端Bootstrap传进来的是group
         return self();
@@ -94,10 +110,17 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
      * {@link Channel} implementation has no no-args constructor.
      */
+    /**
+     * 创建channelFactory->等到特定时机->创建SocketChannel
+     *
+     * 形参指向的类是
+     * {@link io.netty.channel.socket.nio.NioServerSocketChannel} 无参构造器是{@link NioServerSocketChannel#NioServerSocketChannel()}
+     * {@link io.netty.channel.socket.nio.NioSocketChannel} 无参构造器是{@link NioSocketChannel#NioSocketChannel()}
+     *
+     * 其作用就是提供SocketChannel的无参构造器 生成ChannelFactory
+     */
     public B channel(Class<? extends C> channelClass) { // 将ReflectiveChannelFactory的实例赋值给channelFactory属性
-        return this.channelFactory(new ReflectiveChannelFactory<C>(
-                ObjectUtil.checkNotNull(channelClass, "channelClass") // NioServerSocket的class对象
-        ));
+        return this.channelFactory(new ReflectiveChannelFactory<C>(channelClass)); // NioServerSocket的class对象
     }
 
     /**
@@ -105,10 +128,15 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      */
     @Deprecated
     public B channelFactory(ChannelFactory<? extends C> channelFactory) {
-        ObjectUtil.checkNotNull(channelFactory, "channelFactory");
         if (this.channelFactory != null) throw new IllegalStateException("channelFactory set already");
-
-        this.channelFactory = channelFactory; // 设置channelFactory属性 将ReflectiveChannelFactory实例赋值给该属性 在channelFactory中初始化了NioServerSocket的class对象
+        /**
+         * {@link io.netty.channel.ChannelFactory}本质就是一个Channel工厂->阈维护了一个无参构造器->通过newInstance()创建Channel实例
+         *
+         * 两个无参构造器:
+         * {@link NioServerSocketChannel#NioServerSocketChannel()}->创建服务端Channel实例
+         * {@link NioSocketChannel#NioSocketChannel()}->创建客户端Channel实例
+         */
+        this.channelFactory = channelFactory; // 设置channelFactory属性 将ReflectiveChannelFactory实例赋值给该属性
         return self();
     }
 
@@ -248,7 +276,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      */
     public ChannelFuture bind(SocketAddress localAddress) {
         this.validate();
-        return this.doBind(ObjectUtil.checkNotNull(localAddress, "localAddress"));
+        return this.doBind(localAddress);
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
@@ -297,12 +325,19 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * <p></p>
      */
     final ChannelFuture initAndRegister() { // 完成了channel的register操作
+        /**
+         * 具体实现是{@link NioServerSocketChannel}的实例或者{@link NioSocketChannel}的实例
+         */
         Channel channel = null;
         try {
             /**
-             * <p><h3>netty的channel实例化</h3></p>
-             * <p>调用{@link io.netty.channel.socket.nio.NioServerSocketChannel#NioServerSocketChannel()}无参构造方法</p>
+             * {@link io.netty.channel.ChannelFactory#newChannel()}->{@link ReflectiveChannelFactory#newChannel()}->{@link NioServerSocketChannel}或{@link NioSocketChannel}的无参构造器
              *
+             * 两个无参构造器分别是:
+             * {@link NioServerSocketChannel#NioServerSocketChannel()}
+             * {@link NioSocketChannel#NioSocketChannel()}
+             *
+             * <p><h3>netty的channel实例化</h3></p>
              * <ul>
              *     <li>创建jdk的ServerSocketChannel</li>
              *     <li>给每个netty channel分配属性</li>
@@ -352,13 +387,13 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
          *
          * <p>因此<pre>{@code register(...)}</pre>最终实现是在{@link SingleThreadEventLoop#register(Channel)}中</p>
          */
-        ChannelFuture regFuture = this.config().group().register(channel);
+        ChannelFuture regFuture = this
+                .config()
+                .group() // {#link ServerBootstrap#group()}或者{@link Bootstrap#group()}传进去的
+                .register(channel);
         if (regFuture.cause() != null) { // 在register过程中发生异常
-            if (channel.isRegistered()) {
-                channel.close();
-            } else {
-                channel.unsafe().closeForcibly();
-            }
+            if (channel.isRegistered()) channel.close();
+            else channel.unsafe().closeForcibly();
         }
 
         // If we are here and the promise is not failed, it's one of the following cases:
@@ -393,8 +428,22 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     /**
      * the {@link ChannelHandler} to use for serving the requests.
      */
+    /**
+     * 服务端{@link NioServerSocketChannel}和客户端{@link NioSocketChannel}都提供了{@link ChannelHandler}的设置
+     * 用来监听{@link Channel}的各种状态改变和动作 包括连接 绑定 接收消息
+     *
+     * 服务端{@link NioServerSocketChannel}还额外提供了#childHandler()方法 这个方法设置的{@link ChannelHandler}是用来监听已经连接进来的客户端{@link Channel}的状态和动作
+     *
+     * 最大的区别:
+     * 1, #handler()方法添加的处理器在初始化时执行 #childHandler()方法添加的处理器在客户端成功connect进服务端才执行
+     * 2, #handler()方法添加的处理器在bossGroup线程组生效 #childHandler()方法添加的处理器在服务端的workerGroup线程组生效
+     *
+     * 也就意味着:
+     * 对于服务端而言 处理器作用域只在bossGroup线程组 只负责处理服务端新请求
+     * 对于客户端而言 没有workerGroup
+     */
     public B handler(ChannelHandler handler) {
-        this.handler = ObjectUtil.checkNotNull(handler, "handler");
+        this.handler = handler;
         return self();
     }
 

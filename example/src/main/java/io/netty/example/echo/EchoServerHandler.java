@@ -27,14 +27,6 @@ import io.netty.util.CharsetUtil;
 @Sharable
 public class EchoServerHandler extends ChannelInboundHandlerAdapter {
 
-    /**
-     * @author dingrui
-     * @since 2022/2/9
-     * @param ctx:
-     * @param msg:
-     * @return void
-     * @description 接收请求后
-     */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         System.out.println("服务端收到客户端的请求 msg=" + ((ByteBuf) msg).toString(CharsetUtil.UTF_8));
@@ -42,26 +34,11 @@ public class EchoServerHandler extends ChannelInboundHandlerAdapter {
         ctx.write(msg);
     }
 
-    /**
-     * @author dingrui
-     * @since 2022/2/9
-     * @param ctx:
-     * @return void
-     * @description 读取完成后
-     */
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) {
         ctx.flush();
     }
 
-    /**
-     * @author dingrui
-     * @since 2022/2/9
-     * @param ctx:
-     * @param cause:
-     * @return void
-     * @description 异常处理
-     */
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         // Close the connection when an exception is raised.

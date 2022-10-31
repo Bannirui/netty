@@ -52,7 +52,14 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     private final Map<ChannelOption<?>, Object> childOptions = new LinkedHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> childAttrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
     private final ServerBootstrapConfig config = new ServerBootstrapConfig(this); // 创建ServerBootstrapConfig实例 对象中bootstrap属性持有ServerBootstrap的实例 可以通过config获取到bootstrap所有的属性
+
+    // 关注成功连接的请求
     private volatile EventLoopGroup childGroup;
+
+    /**
+     * 作用在workerGroup线程组
+     * 只监听已经成功连接服务端的那些客户端{@link Channel}
+     */
     private volatile ChannelHandler childHandler;
 
     public ServerBootstrap() { }
@@ -83,7 +90,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGroup) { // 设置线程池
         super.group(parentGroup); // boss线程池组交给父类
         if (this.childGroup != null) throw new IllegalStateException("childGroup set already");
-        this.childGroup = ObjectUtil.checkNotNull(childGroup, "childGroup"); // worker线程池组初始化childGroup属性
+        this.childGroup = childGroup; // worker线程池组初始化childGroup属性
         return this;
     }
 
@@ -121,8 +128,12 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     /**
      * Set the {@link ChannelHandler} which is used to serve the request for the {@link Channel}'s.
      */
+    /**
+     * 服务端特有方法 添加进来的{@link ChannelHandler}处理器只作用在workerGroup线程组
+     * 处理器只处理连接进服务端的客户端{@link Channel}
+     */
     public ServerBootstrap childHandler(ChannelHandler childHandler) {
-        this.childHandler = ObjectUtil.checkNotNull(childHandler, "childHandler");
+        this.childHandler = childHandler;
         return this;
     }
 
@@ -143,8 +154,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             public void initChannel(final Channel ch) {
                 final ChannelPipeline pipeline = ch.pipeline();
                 ChannelHandler handler = config.handler(); // 这个handler是在ServerBootstrap::handler()方法中指定的handler实例
-                if (handler != null)
-                    pipeline.addLast(handler); // 将handler添加到pipeline中
+                if (handler != null) pipeline.addLast(handler); // 将handler添加到pipeline中
 
                 ch.eventLoop().execute(new Runnable() {
                     @Override
