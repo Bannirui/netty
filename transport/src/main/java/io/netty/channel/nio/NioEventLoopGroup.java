@@ -94,7 +94,11 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // netty的�
         this(nThreads, executor, selectorProvider, DefaultSelectStrategyFactory.INSTANCE);
     }
 
-    public NioEventLoopGroup(int nThreads, Executor executor, final SelectorProvider selectorProvider, final SelectStrategyFactory selectStrategyFactory) {
+    public NioEventLoopGroup(int nThreads,
+                             Executor executor, // null
+                             final SelectorProvider selectorProvider,
+                             final SelectStrategyFactory selectStrategyFactory
+    ) {
         super(nThreads, executor, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());
     }
 
@@ -178,12 +182,8 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // netty的�
         EventLoopTaskQueueFactory tailTaskQueueFactory = null;
 
         int argsLength = args.length;
-        if (argsLength > 3) {
-            taskQueueFactory = (EventLoopTaskQueueFactory) args[3];
-        }
-        if (argsLength > 4) {
-            tailTaskQueueFactory = (EventLoopTaskQueueFactory) args[4];
-        }
+        if (argsLength > 3) taskQueueFactory = (EventLoopTaskQueueFactory) args[3];
+        if (argsLength > 4) tailTaskQueueFactory = (EventLoopTaskQueueFactory) args[4];
         return new NioEventLoop(this, // this是NioEventLoopGroup实例 在构造NioEventLoop的时候将线程是实例传给parent属性
                 executor,
                 selectorProvider,

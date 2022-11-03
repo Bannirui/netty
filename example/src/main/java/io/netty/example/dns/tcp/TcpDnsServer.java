@@ -57,14 +57,15 @@ public final class TcpDnsServer {
     private static final byte[] QUERY_RESULT = new byte[]{(byte) 192, (byte) 168, 1, 1};
 
     public static void main(String[] args) throws Exception {
-        ServerBootstrap bootstrap = new ServerBootstrap().group(new NioEventLoopGroup(1),
-                new NioEventLoopGroup())
+        ServerBootstrap bootstrap = new ServerBootstrap()
+                .group(new NioEventLoopGroup(1), new NioEventLoopGroup())
                 .channel(NioServerSocketChannel.class)
                 .handler(new LoggingHandler(LogLevel.INFO))
                 .childHandler(new ChannelInitializer<Channel>() {
                     @Override
                     protected void initChannel(Channel ch) throws Exception {
-                        ch.pipeline().addLast(new TcpDnsQueryDecoder(), new TcpDnsResponseEncoder(),
+                        ch.pipeline()
+                                .addLast(new TcpDnsQueryDecoder(), new TcpDnsResponseEncoder(),
                                 new SimpleChannelInboundHandler<DnsQuery>() {
                                     @Override
                                     protected void channelRead0(ChannelHandlerContext ctx,

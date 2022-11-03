@@ -131,8 +131,8 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     private int cancelledKeys;
     private boolean needsToSelectAgain;
 
-    NioEventLoop(NioEventLoopGroup parent, // 线程池NioEventLoopGroup是池中线程NioEventLoop的parent
-                 Executor executor,
+    NioEventLoop(NioEventLoopGroup parent, // 标识EventLoop归属于哪个group
+                 Executor executor, // 线程执行器 将线程和EventLoop绑定
                  SelectorProvider selectorProvider,
                  SelectStrategy strategy,
                  RejectedExecutionHandler rejectedExecutionHandler,

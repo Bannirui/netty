@@ -19,6 +19,10 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 
 public final class ThreadPerTaskExecutor implements Executor { // 只有一个execute方法 每来一个任务就新建一个线程 这个线程池不是给NioEventLoopGroup使用的 而是给NioEventLoop使用的
+
+    /**
+     * 负责创建线程
+     */
     private final ThreadFactory threadFactory;
 
     public ThreadPerTaskExecutor(ThreadFactory threadFactory) {

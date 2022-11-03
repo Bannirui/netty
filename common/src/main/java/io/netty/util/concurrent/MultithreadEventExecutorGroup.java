@@ -30,10 +30,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public abstract class MultithreadEventExecutorGroup extends AbstractEventExecutorGroup {
 
+    /**
+     * NioEventLoopGroup中维护的NioEventLoop集合 一个group里面有哪些EventLoop
+     */
     private final EventExecutor[] children;
     private final Set<EventExecutor> readonlyChildren;
     private final AtomicInteger terminatedChildren = new AtomicInteger();
     private final Promise<?> terminationFuture = new DefaultPromise(GlobalEventExecutor.INSTANCE);
+
+    /**
+     * 线程选择器
+     * 当出现新的IO事件需要处理时 从NioEventLoopGroup中选取出一个NioEventLoop
+     */
     private final EventExecutorChooserFactory.EventExecutorChooser chooser;
 
     /**
@@ -54,7 +62,10 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      * @param executor          the Executor to use, or {@code null} if the default should be used.
      * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
      */
-    protected MultithreadEventExecutorGroup(int nThreads, Executor executor, Object... args) {
+    protected MultithreadEventExecutorGroup(int nThreads,
+                                            Executor executor, // null
+                                            Object... args // [SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]
+    ) {
         this(nThreads, executor, DefaultEventExecutorChooserFactory.INSTANCE, args);
     }
 
@@ -66,9 +77,13 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      * @param chooserFactory    the {@link EventExecutorChooserFactory} to use.
      * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
      */
-    protected MultithreadEventExecutorGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory, Object... args) {
+    protected MultithreadEventExecutorGroup(int nThreads, // 标识着group中有几个EventLoop
+                                            Executor executor, // null
+                                            EventExecutorChooserFactory chooserFactory, // DefaultEventExecutorChooserFactory.INSTANCE
+                                            Object... args // [SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]
+    ) {
         if (executor == null)
-            executor = new ThreadPerTaskExecutor(newDefaultThreadFactory()); // 构造一个executor线程执行器 这个线程池不是给NioEventLoopGroup使用的 而是给NioEventLoop使用的 每来一个任务就新建一个线程
+            executor = new ThreadPerTaskExecutor(this.newDefaultThreadFactory()); // 构造一个executor线程执行器 这个线程池不是给NioEventLoopGroup使用的 而是给NioEventLoop使用的 每来一个任务就新建一个线程
 
         /**
          * 构建NioEventLoop
@@ -83,6 +98,8 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                  * children是EventExecutor数组 也就是NioEventLoop集合
                  * {@link MultithreadEventExecutorGroup#newChild(Executor, Object...)}方法是抽象方法 具体实现子类关注
                  * 因为是NioEventLoopGroup调用的该方法 所以最终实现在NioEventLoopGroup中
+                 *
+                 * 将每个EventLoop和每个线程关联起来
                  */
                 children[i] = this.newChild(executor, args);
                 success = true;
