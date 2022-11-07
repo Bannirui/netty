@@ -62,7 +62,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
          */
         @Override
         public EventExecutor next() { // 线程池线程数是2的幂次方 位运算
-            return executors[idx.getAndIncrement() & executors.length - 1];
+            return this.executors[idx.getAndIncrement() & this.executors.length - 1];
         }
     }
 
@@ -71,7 +71,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         // The 64-bit long solves this by placing the overflow so far into the future, that no system
         // will encounter this in practice.
         private final AtomicLong idx = new AtomicLong();
-        private final EventExecutor[] executors;
+        private final EventExecutor[] executors; // 在EventLoopGroup构造器中初始化的EventLoop数组
 
         GenericEventExecutorChooser(EventExecutor[] executors) {
             this.executors = executors;
@@ -82,7 +82,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
          */
         @Override
         public EventExecutor next() { // 线程池线程数量不是2的幂次方 采用取模方式
-            return executors[(int) Math.abs(idx.getAndIncrement() % executors.length)];
+            return this.executors[(int) Math.abs(idx.getAndIncrement() % this.executors.length)];
         }
     }
 }

@@ -82,8 +82,8 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                                             EventExecutorChooserFactory chooserFactory, // DefaultEventExecutorChooserFactory.INSTANCE
                                             Object... args // [SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]
     ) {
-        if (executor == null)
-            executor = new ThreadPerTaskExecutor(this.newDefaultThreadFactory()); // 构造一个executor线程执行器 这个线程池不是给NioEventLoopGroup使用的 而是给NioEventLoop使用的 每来一个任务就新建一个线程
+        if (executor == null) // 线程执行器 非守护线程(main线程退出可以继续执行)
+            executor = new ThreadPerTaskExecutor(this.newDefaultThreadFactory()); // 构造一个executor线程执行器 一个任务对应一个线程(线程:任务=1:n)
 
         /**
          * 构建NioEventLoop
@@ -91,15 +91,11 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
          */
         this.children = new EventExecutor[nThreads];
 
-        for (int i = 0; i < nThreads; i ++) { // 实例化children数组中的每一个元素
+        for (int i = 0; i < nThreads; i ++) { // 根据NioEventLoopGroup构造器指定的数量创建NioEventLoop 也就是指定数量的线程数(线程的创建动作延迟到任务提交时)
             boolean success = false;
             try {
                 /**
-                 * children是EventExecutor数组 也就是NioEventLoop集合
-                 * {@link MultithreadEventExecutorGroup#newChild(Executor, Object...)}方法是抽象方法 具体实现子类关注
-                 * 因为是NioEventLoopGroup调用的该方法 所以最终实现在NioEventLoopGroup中
-                 *
-                 * 将每个EventLoop和每个线程关联起来
+                 * 初始化NioEventLoop事件循环器集合 也就是多个线程
                  */
                 children[i] = this.newChild(executor, args);
                 success = true;
@@ -131,7 +127,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         /**
          * 创建线程选择器
          * 线程选择策略
-         * NioEventLoop都绑定一个chooser对象 作为线程选择器 通过这个线程选择器 为每一个channel分配不同的线程
+         * NioEventLoopGroup都绑定一个chooser对象 作为线程选择器 通过这个线程选择器 为每一个channel发生的读写IO分配不同的线程进行处理
          */
         this.chooser = chooserFactory.newChooser(children);
 
@@ -157,7 +153,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
 
     @Override
     public EventExecutor next() {
-        return chooser.next();
+        return this.chooser.next();
     }
 
     @Override

@@ -35,7 +35,7 @@ import java.util.concurrent.ThreadFactory;
 /**
  * {@link MultithreadEventLoopGroup} implementations which is used for NIO {@link Selector} based {@link Channel}s.
  */
-public class NioEventLoopGroup extends MultithreadEventLoopGroup { // netty的线程池指的就是NioEventLoopGroup的实例 创建线程池NioEventLoopGroup会实例化池中所有的NioEventLoop实例(指定线程数量或者cpu*2) 但是并没有真正创建NioEventLoop中真实的线程Thread实例 Thread实例的创建时机是在第一个任务提交过来的时候 channel的register操作就是第一个任务
+public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循环器管理器负责管理事件循环器(创建 使用 销毁) 会实例化所有的NioEventLoop实例(指定线程数量或者cpu*2) 但是并没有真正创建NioEventLoop中真实的线程Thread实例 Thread实例的创建时机是在第一个任务提交过来的时候 channel的register操作就是第一个任务
 
     /**
      * Create a new instance using the default number of threads, the default {@link ThreadFactory} and
@@ -96,7 +96,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // netty的�
 
     public NioEventLoopGroup(int nThreads,
                              Executor executor, // null
-                             final SelectorProvider selectorProvider,
+                             final SelectorProvider selectorProvider, // 创建Java的NIO复用器
                              final SelectStrategyFactory selectStrategyFactory
     ) {
         super(nThreads, executor, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());

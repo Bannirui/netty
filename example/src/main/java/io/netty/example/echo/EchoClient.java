@@ -31,7 +31,7 @@ public final class EchoClient {
 
     public static void main(String[] args) throws Exception {
         // Configure the client.
-        EventLoopGroup group = new NioEventLoopGroup(); // 客户端1个group Netty中的线程池
+        EventLoopGroup group = new NioEventLoopGroup(); // 客户端1个group Netty中的多个线程
         try {
             Bootstrap b = new Bootstrap(); // 创建客户端实例
             b.group(group)

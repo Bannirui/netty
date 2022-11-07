@@ -112,6 +112,6 @@ public abstract class AbstractEventExecutorGroup implements EventExecutorGroup {
 
     @Override
     public void execute(Runnable command) {
-        next().execute(command);
+        this.next().execute(command);
     }
 }
