@@ -97,7 +97,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                 /**
                  * 初始化NioEventLoop事件循环器集合 也就是多个线程
                  */
-                children[i] = this.newChild(executor, args);
+                children[i] = this.newChild(executor, args); // args=[SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]
                 success = true;
             } catch (Exception e) {
                 // TODO: Think about if this is a good exception type

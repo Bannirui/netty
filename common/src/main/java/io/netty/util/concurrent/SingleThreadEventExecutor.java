@@ -74,16 +74,31 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             AtomicReferenceFieldUpdater.newUpdater(
                     SingleThreadEventExecutor.class, ThreadProperties.class, "threadProperties");
 
+    /**
+     * 常规任务队列
+     * 1 通过EventLoopGroup或者EventLoop提供的API提交的任务(execute/submit...)
+     * 2 从定时任务队列中找到的符合运行时机的定时任务
+     * 3 WAKEUP_TASK
+     */
     private final Queue<Runnable> taskQueue;
 
     private volatile Thread thread;
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
-    private final Executor executor;
+    private final Executor executor; // 线程执行器 触发它的execute()方法就会创建一个真正的线程
     private volatile boolean interrupted;
 
     private final CountDownLatch threadLock = new CountDownLatch(1);
     private final Set<Runnable> shutdownHooks = new LinkedHashSet<Runnable>();
+
+    /**
+     * 标识位
+     * 如何唤醒阻塞线程
+     * 因为NioEventLoop的实现中 线程阻塞发生点是在复用器的select()上 而不是发生在任务队列的空条件上 所以唤醒方式也不是根据任务队列情况 而是借助复用器 因此这个属性设置为false
+     * 换言之
+     *     - 如果实现类中 阻塞发生在队列上 线程唤醒就要借助队列 addTaskWakesUp设置为true
+     *     - 如果实现类中 阻塞不是发生队列上(比如NioEventLoop中是发生在复用器操作上) 则addTaskWakesUp设置为false
+     */
     private final boolean addTaskWakesUp;
     private final int maxPendingTasks;
     private final RejectedExecutionHandler rejectedExecutionHandler;
@@ -161,11 +176,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler");
     }
 
-    protected SingleThreadEventExecutor(EventExecutorGroup parent, Executor executor,
-                                        boolean addTaskWakesUp, Queue<Runnable> taskQueue,
-                                        RejectedExecutionHandler rejectedHandler) { // 所以本质上每个线程也是一个线程池(单线程线程池)
+    protected SingleThreadEventExecutor(EventExecutorGroup parent,
+                                        Executor executor,
+                                        boolean addTaskWakesUp,
+                                        Queue<Runnable> taskQueue,
+                                        RejectedExecutionHandler rejectedHandler
+    ) { // 所以本质上每个线程也是一个线程池(单线程线程池)
         super(parent); // 设置parent 也就是NioEventLoopGroup实例
-        this.addTaskWakesUp = addTaskWakesUp;
+        this.addTaskWakesUp = addTaskWakesUp; // 标识唤醒阻塞线程的方式 NioEventLoop阻塞发生在复用器操作上 因此这个设置为false
         this.maxPendingTasks = DEFAULT_MAX_PENDING_EXECUTOR_TASKS;
         this.executor = ThreadExecutorMap.apply(executor, this); // 初始化线程执行器 ThreadPerTaskExecutor实例 不是给NioEventLoopGroup线程池使用的 而是给里面的线程NioEventLoop使用的 作用是开启NioEventLoop实例中的线程(真正的线程Thread)
         this.taskQueue = ObjectUtil.checkNotNull(taskQueue, "taskQueue"); // 创建任务队列 提交给NioEventLoop的任务都会进入到这个taskQueue中等待被执行 这个taskQueue容量默认值16 任务队列 NioEventLoop需要负责IO事件和非IO事件 通常它都是在执行selector::select方法或者正在处理selectedKeys 如果要submit一个任务给它 任务就会被放到taskQueue中 等它来轮询 该队列是线程安全的LinkedBlockingQueue
@@ -210,7 +228,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         return pollTaskFrom(taskQueue);
     }
 
-    protected static Runnable pollTaskFrom(Queue<Runnable> taskQueue) {
+    protected static Runnable pollTaskFrom(Queue<Runnable> taskQueue) { // 从常规任务队列中取任务
         for (;;) {
             Runnable task = taskQueue.poll();
             if (task != WAKEUP_TASK) {
@@ -276,20 +294,20 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     /**
-     * 从定时任务队列中聚合任务
+     * 从定时任务队列中找到可执行的定时任务
      * 从定时任务中找到可以执行的任务将任务添加到普通任务队列taskQueue中
      */
     private boolean fetchFromScheduledTaskQueue() {
-        if (scheduledTaskQueue == null || scheduledTaskQueue.isEmpty()) return true;
+        if (this.scheduledTaskQueue == null || this.scheduledTaskQueue.isEmpty()) return true;
         // 从定时任务队列中寻找截止时间为nanoTime的任务
         long nanoTime = AbstractScheduledEventExecutor.nanoTime();
         for (;;) {
-            Runnable scheduledTask = pollScheduledTask(nanoTime);
+            Runnable scheduledTask = super.pollScheduledTask(nanoTime); // 可执行的定时任务
             if (scheduledTask == null) return true;
             // 添加到普通任务队列过程失败就重新添加回定时任务队列中
-            if (!taskQueue.offer(scheduledTask)) {
+            if (!this.taskQueue.offer(scheduledTask)) {
                 // No space left in the task queue add it back to the scheduledTaskQueue so we pick it up again.
-                scheduledTaskQueue.add((ScheduledFutureTask<?>) scheduledTask);
+                this.scheduledTaskQueue.add((ScheduledFutureTask<?>) scheduledTask); // taskQueue常规任务队列已经满了 再把定时任务放回远处 等待下一轮执行时机
                 return false;
             }
         }
@@ -367,13 +385,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * @return {@code true} if and only if at least one task was run
      */
     protected boolean runAllTasks() {
-        assert inEventLoop();
+        assert super.inEventLoop();
         boolean fetchedAll;
         boolean ranAtLeastOne = false;
 
         do {
-            fetchedAll = fetchFromScheduledTaskQueue();
-            if (runAllTasksFrom(taskQueue)) ranAtLeastOne = true;
+            fetchedAll = this.fetchFromScheduledTaskQueue(); // 尝试从定时任务队列中找到所有可执行的定时任务放到常规任务队列taskQueue中
+            if (this.runAllTasksFrom(this.taskQueue)) ranAtLeastOne = true;
         } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
 
         if (ranAtLeastOne) lastExecutionTime = ScheduledFutureTask.nanoTime();
@@ -415,13 +433,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * @return {@code true} if at least one task was executed.
      */
     protected final boolean runAllTasksFrom(Queue<Runnable> taskQueue) {
-        Runnable task = pollTaskFrom(taskQueue);
+        Runnable task = this.pollTaskFrom(taskQueue);
         if (task == null) {
             return false;
         }
         for (;;) {
-            safeExecute(task);
-            task = pollTaskFrom(taskQueue);
+            super.safeExecute(task);
+            task = this.pollTaskFrom(taskQueue);
             if (task == null) {
                 return true;
             }
@@ -479,14 +497,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 if (lastExecutionTime >= deadline) break; // 如果超过了截止时间就不再执行
             }
             // 执行到这说明还没超过截止时间 继续从普通任务队列中取任务 直到任务取完队列为空
-            task = pollTask();
+            task = this.pollTask();
             if (task == null) {
                 lastExecutionTime = ScheduledFutureTask.nanoTime(); // 记录下最后执行时间
                 break;
             }
         }
         // 收尾工作
-        afterRunningAllTasks();
+        this.afterRunningAllTasks();
         this.lastExecutionTime = lastExecutionTime;
         return true;
     }
@@ -545,11 +563,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         // NOOP
     }
 
-    protected void wakeup(boolean inEventLoop) {
+    protected void wakeup(boolean inEventLoop) { // NioEventLoop覆写了这个方法 有自己的特定实现
         if (!inEventLoop) {
             // Use offer as we actually only need this to unblock the thread and if offer fails we do not care as there
             // is already something in the queue.
-            taskQueue.offer(WAKEUP_TASK);
+            this.taskQueue.offer(WAKEUP_TASK);
         }
     }
 
@@ -812,6 +830,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     @Override
     public void execute(Runnable task) {
         ObjectUtil.checkNotNull(task, "task");
+        // !(task instanceof LazyRunnable) && wakesUpForTask(task) -> true
+        // this.execute(task, true);
         this.execute(task, !(task instanceof LazyRunnable) && wakesUpForTask(task));
     }
 
@@ -821,11 +841,23 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     private void execute(Runnable task, boolean immediate) {
-        boolean inEventLoop = super.inEventLoop(); // 判断添加任务的线程是否就是当前EventLoop中的线程 开启线程肯定会为NioEventLoop绑定一个线程对象 如果判断当前线程对象不是当前NioEventLoop绑定的线程对象 说明执行该方法的线程不是当前NioEventLoop线程
-        this.addTask(task); // 添加任务到taskQueue中 如果任务队列已经满了 就触发拒绝策略
+        /**
+         * NioEventLoop只有一个线程 且它的阻塞点只有在IO多路复用器操作上
+         * 因此当前添加任务的线程
+         *     - NioEventLoop线程 说明它压根没有被阻塞 而且肯定已经处于运行中状态
+         *         - 这个线程已经被创建执行 那么这个新添加的任务迟早会被取出来执行
+         *     - 不是NioEventLoop线程 是其他线程往NioEventLoop添加任务
+         *         - 如果这个线程还没被创建执行 那么相当于任务裹挟着线程进行延迟创建并执行任务
+         *         - 当任务队列没有任务 也没有IO事件到达时 NioEventLoop线程迟早会阻塞在复用器上
+         *             - 阻塞期间有IO事件到达 退出select阻塞继续工作
+         *             - 有定时任务还可能超时退出select NioEventLoop线程继续工作
+         *             - 没有定时任务就永远阻塞 唤醒的方式 只有外部线程往NioEventLoop添加新任务触发selector复用器的wakeup()
+         */
+        boolean inEventLoop = super.inEventLoop();
+        this.addTask(task); // 添加任务到taskQueue中 如果任务队列已经满了 就触发拒绝策略(抛异常)
         if (!inEventLoop) {
             this.startThread(); // 如果不是NioEventLoop内部的线程提交的任务 判断下线程是否已经启动 如果还没有启动就启动线程
-            if (isShutdown()) {
+            if (this.isShutdown()) {
                 boolean reject = false;
                 try {
                     if (removeTask(task)) reject = true;
@@ -838,11 +870,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             }
         }
 
-        /**
-         * 添加task到任务队列之后 NioEventLoop的select()操作是否需要唤醒
-         * addTaskWakesUp属性是在初始化NioEventLoop的时候传入的 默认为false
-         */
-        if (!addTaskWakesUp && immediate) wakeup(inEventLoop);
+        // NioEventLoop中线程阻塞点有且只有一个是在复用器上 因此addTaskWakesUp为false
+        if (!addTaskWakesUp && immediate) this.wakeup(inEventLoop); // 唤醒阻塞的线程 这个wakeup(...)方法在子类NioEventLoop中特定的实现(借助复用器进行唤醒阻塞在复用器上的线程)
     }
 
     @Override
@@ -936,14 +965,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void startThread() { // 判断线程是否已经启动 决定是否要进行启动操作
         if (state == ST_NOT_STARTED) {
-            if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
+            if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) { // state状态标识线程已经启动
                 boolean success = false;
                 try {
-                    this.doStartThread(); // 启动线程
+                    this.doStartThread(); // 启动线程 在每个NioEventLoop只会被执行一次 保证NioEventLoop:线程=1:1
                     success = true;
                 } finally {
                     if (!success) {
-                        STATE_UPDATER.compareAndSet(this, ST_STARTED, ST_NOT_STARTED);
+                        STATE_UPDATER.compareAndSet(this, ST_STARTED, ST_NOT_STARTED); // 线程启动失败依然将state标识为未启动
                     }
                 }
             }
@@ -970,7 +999,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void doStartThread() {
         assert thread == null;
-        executor.execute(new Runnable() { // 这个executor就是实例化NioEventLoop时候传进来的ThreadPerTaskExecutor实例 每次来一个任务创建一个线程 调用execute()方法就会创建一个新的线程 也就是真正的线程Thread实例
+        this.executor.execute(new Runnable() { // 这个executor就是实例化NioEventLoop时候传进来的ThreadPerTaskExecutor实例 每次来一个任务创建一个线程 调用execute()方法就会创建一个新的线程 也就是真正的线程Thread实例 Netty中Reactor模型=IO复用器select+多EventLoop线程 所以实际上这个executor线程执行器执行时机有且只有一次 保证一个EventLoop永远只跟一个线程实例班绑定
             @Override
             public void run() {
                 thread = Thread.currentThread(); // 将executor线程池中创建的线程设置为NioEventLoop的线程

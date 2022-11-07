@@ -19,12 +19,12 @@ import io.netty.util.internal.DefaultPriorityQueue;
 import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.PriorityQueue;
 
-import static io.netty.util.concurrent.ScheduledFutureTask.deadlineNanos;
-
 import java.util.Comparator;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+
+import static io.netty.util.concurrent.ScheduledFutureTask.deadlineNanos;
 
 /**
  * Abstract base class for {@link EventExecutor}s that want to support scheduling.
@@ -123,14 +123,14 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
      * Return the {@link Runnable} which is ready to be executed with the given {@code nanoTime}.
      * You should use {@link #nanoTime()} to retrieve the correct {@code nanoTime}.
      */
-    protected final Runnable pollScheduledTask(long nanoTime) {
+    protected final Runnable pollScheduledTask(long nanoTime) { // 可执行的定时任务
         assert inEventLoop();
 
-        ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
+        ScheduledFutureTask<?> scheduledTask = this.peekScheduledTask();
         if (scheduledTask == null || scheduledTask.deadlineNanos() - nanoTime > 0) {
             return null;
         }
-        scheduledTaskQueue.remove();
+        this.scheduledTaskQueue.remove();
         scheduledTask.setConsumed();
         return scheduledTask;
     }
@@ -147,7 +147,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
      * Return the deadline (in nanoseconds) when the next scheduled task is ready to be run or {@code -1}
      * if no task is scheduled.
      */
-    protected final long nextScheduledTaskDeadlineNanos() {
+    protected final long nextScheduledTaskDeadlineNanos() { // 定时任务队列中下一个待执行定时任务还有多久可以被唤醒执行 -1表示没有定时任务可以执行
         ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
         return scheduledTask != null ? scheduledTask.deadlineNanos() : -1;
     }

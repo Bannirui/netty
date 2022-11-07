@@ -25,8 +25,19 @@ final class DefaultSelectStrategy implements SelectStrategy {
 
     private DefaultSelectStrategy() { }
 
+    /**
+     * selectSupplier回调接口
+     *     - 在NioEventLoop中是IO多路复用器Selector的非阻塞方式执行select()方法 返回值只有两种情况
+     *         - 0值 没有Channel处于IO事件就绪状态
+     *         - 正数 IO事件就绪的Channel数量
+     * hasTasks
+     *     - taskQueue常规任务队列或者tailTasks收尾任务队列不为空就界定为有待执行任务 hasTasks为True
+     *
+     * 也就是说如果任务队列有任务待执行 使用非阻塞方式执行一次复用器的select()操作
+     * 如果任务队列都是空的 就直接准备以阻塞方式执行一次复用器的select()操作
+     */
     @Override
     public int calculateStrategy(IntSupplier selectSupplier, boolean hasTasks) throws Exception {
-        return hasTasks ? selectSupplier.get() : SelectStrategy.SELECT; // 如果taskQueue中有任务就执行到get() 最终执行到NioEventLoop::selectNow()方法
+        return hasTasks ? selectSupplier.get() : SelectStrategy.SELECT;
     }
 }

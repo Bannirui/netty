@@ -110,11 +110,11 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     /**
      * The NIO {@link Selector}.
      */
-    private Selector selector; // 线程池中每一个线程都有一个selector
-    private Selector unwrappedSelector;
+    private Selector selector; // Netty优化过的Java IO多路复用器
+    private Selector unwrappedSelector; // Java原生的IO多路复用器
     private SelectedSelectionKeySet selectedKeys;
 
-    private final SelectorProvider provider; // NioEventLoopGroup::newChild传进来的 一个线程池有一个selectorProvider 用于创建selector实例
+    private final SelectorProvider provider; // IO多路复用器提供器 用于创建多路复用器实现
 
     private static final long AWAKE = -1L;
     private static final long NONE = Long.MAX_VALUE;
@@ -123,9 +123,9 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     //    AWAKE            when EL is awake
     //    NONE             when EL is waiting with no wakeup scheduled
     //    other value T    when EL is waiting with wakeup scheduled at time T
-    private final AtomicLong nextWakeupNanos = new AtomicLong(AWAKE);
+    private final AtomicLong nextWakeupNanos = new AtomicLong(AWAKE); // 如果NioEventLoop线程处于阻塞状态 下一次啥时候将它唤醒
 
-    private final SelectStrategy selectStrategy; // select操作的策略
+    private final SelectStrategy selectStrategy; // 这个select是针对taskQueue任务队列中任务的选择策略
 
     private volatile int ioRatio = 50; // IO任务的执行事件比例 每个线程既有IO任务执行 又有非IO任务执行 该参数为了保证有足够的时间给IO
     private int cancelledKeys;
@@ -133,26 +133,28 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
 
     NioEventLoop(NioEventLoopGroup parent, // 标识EventLoop归属于哪个group
                  Executor executor, // 线程执行器 将线程和EventLoop绑定
-                 SelectorProvider selectorProvider,
-                 SelectStrategy strategy,
-                 RejectedExecutionHandler rejectedExecutionHandler,
-                 EventLoopTaskQueueFactory taskQueueFactory,
-                 EventLoopTaskQueueFactory tailTaskQueueFactory) {
+                 SelectorProvider selectorProvider, // Java中IO多路复用器提供器
+                 SelectStrategy strategy, // 正常任务队列选择策略
+                 RejectedExecutionHandler rejectedExecutionHandler, // 正常任务队列拒绝策略
+                 EventLoopTaskQueueFactory taskQueueFactory, // 正常任务
+                 EventLoopTaskQueueFactory tailTaskQueueFactory // 收尾任务
+    ) {
         super(parent,
                 executor,
                 false,
-                newTaskQueue(taskQueueFactory),
-                newTaskQueue(tailTaskQueueFactory),
-                rejectedExecutionHandler); // 调用父类构造方法
-        this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider");
-        this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
+                newTaskQueue(taskQueueFactory), // 正常任务队列
+                newTaskQueue(tailTaskQueueFactory), // 收尾任务队列
+                rejectedExecutionHandler
+        ); // 调用父类构造方法
+        this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider"); // IO多路复用器提供器 用于创建多路复用器实现
+        this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy"); // 这个select是针对taskQueue任务队列中任务的选择策略
         final SelectorTuple selectorTuple = this.openSelector(); // 开启NIO中的组件 selector 意味着NioEventLoopGroup这个线程池中每个线程NioEventLoop都有自己的selector
         /**
          * 创建NioEventLoop绑定的selector对象
-         * 初始化了selector
+         * 初始化了IO多路复用器
          */
-        this.selector = selectorTuple.selector;
-        this.unwrappedSelector = selectorTuple.unwrappedSelector;
+        this.selector = selectorTuple.selector; // Netty优化过的IO多路复用器
+        this.unwrappedSelector = selectorTuple.unwrappedSelector; // Java原生的多路复用器
     }
 
     private static Queue<Runnable> newTaskQueue(
@@ -164,8 +166,8 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     private static final class SelectorTuple {
-        final Selector unwrappedSelector;
-        final Selector selector;
+        final Selector unwrappedSelector; // Java原生的IO多路复用器
+        final Selector selector; // Netty优化了Java原生的IO多路复用器
 
         SelectorTuple(Selector unwrappedSelector) {
             this.unwrappedSelector = unwrappedSelector;
@@ -179,13 +181,13 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     private SelectorTuple openSelector() {
-        final Selector unwrappedSelector;
+        final Selector unwrappedSelector; // 从命名就可以看出来Netty对Java的多路复用器做了封装
         try {
             /**
              * jdk底层的api
-             * 创建了jdk底层的selector
+             * 创建了Java的IO多路复用器selector
              */
-            unwrappedSelector = provider.openSelector();
+            unwrappedSelector = this.provider.openSelector();
         } catch (IOException e) {
             throw new ChannelException("failed to open a new selector", e);
         }
@@ -195,7 +197,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
          * 默认false 也就说默认需要进行优化
          * netty要对jdk原生的selector进行优化 selector在select()操作的时候 会通过selector.selectedKeys()操作返回一个Set<SelectionKey> 这个是Set类型 netty对这个set进行了处理 使用SelectedSelectionKeySet这个数据结构进行了替换 当在select()操作时将key存入一个SelectedSelectionKeySet数据结构中
          */
-        if (DISABLE_KEY_SET_OPTIMIZATION) return new SelectorTuple(unwrappedSelector);
+        if (DISABLE_KEY_SET_OPTIMIZATION) return new SelectorTuple(unwrappedSelector); // 不需要优化 直接使用Java原生的复用器实现
 
         Object maybeSelectorImplClass = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
@@ -469,25 +471,34 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
 
     @Override
     protected void run() {
-        int selectCnt = 0;
+        int selectCnt = 0; // 当前EventLoop事件循环器代表的线程执行复用器select空轮询操作计数
         for (;;) {
             try {
                 int strategy;
-                try { // selectNowSupplier是个匿名类 实现了IntSupplier接口 该接口只有一个get()方法 调用到当前类NioEventLoop中的selectNow()方法
-                    strategy = selectStrategy.calculateStrategy(this.selectNowSupplier, hasTasks()); // selectStrategy有两个值 一个是CONTINUE 一个是SELECT 根据是否有任务在排队决定是否可以进行阻塞 如果taskQueue不为空 也就是hasTasks()返回true 执行一次selectNow() 该方法不会阻塞 如果hashTask()返回false 那么执行SelectStrategy.SELECT分支 进行select() 该方法阻塞
+                try {
+                    /**
+                     * strategy这个值只有3种情况 决定复用器如何执行(阻塞/非阻塞)
+                     *     - 任务队列为空->-1->复用器即将以阻塞方式执行一次
+                     *     - 任务队列(常规任务队列taskQueue+收尾任务队列tailTasks)有任务 复用器以非阻塞方式执行一次
+                     *         - 没有IO事件->0
+                     *         - 有IO事件->Channel数量
+                     *
+                     * 这样设计的方式是不要让阻塞调用复用器导致既有任务不能即使执行
+                     */
+                    strategy = this.selectStrategy.calculateStrategy(this.selectNowSupplier, super.hasTasks());
                     switch (strategy) {
-                    case SelectStrategy.CONTINUE:
+                    case SelectStrategy.CONTINUE: // -2
                         continue;
 
-                    case SelectStrategy.BUSY_WAIT:
+                    case SelectStrategy.BUSY_WAIT: // -3
                         // fall-through to SELECT since the busy-wait is not supported with NIO
 
-                    case SelectStrategy.SELECT: // 任务队列中没有任务
-                        long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
-                        if (curDeadlineNanos == -1L) curDeadlineNanos = NONE; // nothing on the calendar
-                        nextWakeupNanos.set(curDeadlineNanos);
+                    case SelectStrategy.SELECT: // -1 任务队列为空 将线程阻塞在复用器上 唤醒时机有两种情况(阻塞期间有IO事件到达 阻塞指定事件后主动结束阻塞开始执行定时任务)
+                        long curDeadlineNanos = super.nextScheduledTaskDeadlineNanos(); // 定时任务队列中下一个待执行定时任务还有多久可以被唤醒执行 -1表示没有定时任务可以执行
+                        if (curDeadlineNanos == -1L) curDeadlineNanos = NONE; // nothing on the calendar // 边界情况 没有定时任务要执行
+                        this.nextWakeupNanos.set(curDeadlineNanos); // 下一次啥时候将线程唤醒
                         try {
-                            if (!hasTasks()) strategy = this.select(curDeadlineNanos); // select()方法阻塞
+                            if (!super.hasTasks()) strategy = this.select(curDeadlineNanos); // select()方法阻塞 超时时间是为了执行可能存在的定时任务 如果没有定时任务就将一直阻塞在复用器的select()操作上等待被唤醒
                         } finally {
                             // This update is just to help block unnecessary selector wakeups
                             // so use of lazySet is ok (no race condition)
@@ -505,20 +516,20 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                     continue;
                 }
 
-                selectCnt++;
+                selectCnt++; // 前面任务队列有任务 执行了一次复用器是空轮询
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
                 final int ioRatio = this.ioRatio; // 默认值是50
-                boolean ranTasks;
+                boolean ranTasks; // 标识taskQueue中任务都被执行过一轮
                 if (ioRatio == 100) { // 100->先执行IO操作 然后在finally代码块中执行taskQueue中的任务
                     try {
                         /**
                          * 处理轮询到的key
                          */
-                        if (strategy > 0) processSelectedKeys();
+                        if (strategy > 0) this.processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
-                        ranTasks = runAllTasks();
+                        ranTasks = super.runAllTasks();
                     }
                 } else if (strategy > 0) { // 不是100 根据IO操作耗时 限制非IO操作耗时
                     final long ioStartTime = System.nanoTime();
@@ -539,7 +550,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                         ranTasks = super.runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
                 } else
-                    ranTasks = runAllTasks(0); // This will run the minimum number of tasks
+                    ranTasks = super.runAllTasks(0); // This will run the minimum number of tasks
 
                 if (ranTasks || strategy > 0) selectCnt = 0;
                 else if (unexpectedSelectorWakeup(selectCnt)) selectCnt = 0;
@@ -823,9 +834,9 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     @Override
-    protected void wakeup(boolean inEventLoop) {
-        if (!inEventLoop && nextWakeupNanos.getAndSet(AWAKE) != AWAKE) {
-            selector.wakeup();
+    protected void wakeup(boolean inEventLoop) { // 唤醒阻塞在复用器上的线程 NioEventLoop跟线程绑定了 自己阻塞在了复用器上后只能通过其他线程唤醒自己
+        if (!inEventLoop && nextWakeupNanos.getAndSet(AWAKE) != AWAKE) { // 唤醒条件(NioEventLoop外部线程 NioEventLoop线程阻塞在复用器上[不是AWAKE已经被唤醒状态])
+            this.selector.wakeup(); // 唤醒阻塞在复用器上的线程
         }
     }
 
@@ -846,11 +857,11 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     int selectNow() throws IOException {
-        return selector.selectNow();
+        return selector.selectNow(); // IO多路复用器以非阻塞方式执行select()方法
     }
 
-    private int select(long deadlineNanos) throws IOException {
-        if (deadlineNanos == NONE) return selector.select();
+    private int select(long deadlineNanos) throws IOException { // 阻塞方式执行一次复用器select()操作
+        if (deadlineNanos == NONE) return selector.select(); // 永久阻塞
         // Timeout will only be 0 if deadline is within 5 microsecs
         long timeoutMillis = deadlineToDelayNanos(deadlineNanos + 995000L) / 1000000L;
         return timeoutMillis <= 0 ? selector.selectNow() : selector.select(timeoutMillis);

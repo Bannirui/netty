@@ -36,7 +36,7 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
     protected static final int DEFAULT_MAX_PENDING_TASKS = Math.max(16,
             SystemPropertyUtil.getInt("io.netty.eventLoop.maxPendingTasks", Integer.MAX_VALUE));
 
-    private final Queue<Runnable> tailTasks;
+    private final Queue<Runnable> tailTasks; // 收尾任务队列(不重要 忽略)
 
     protected SingleThreadEventLoop(EventLoopGroup parent, ThreadFactory threadFactory, boolean addTaskWakesUp) {
         this(parent, threadFactory, addTaskWakesUp, DEFAULT_MAX_PENDING_TASKS, RejectedExecutionHandlers.reject());
@@ -60,11 +60,15 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
         tailTasks = newTaskQueue(maxPendingTasks);
     }
 
-    protected SingleThreadEventLoop(EventLoopGroup parent, Executor executor,
-                                    boolean addTaskWakesUp, Queue<Runnable> taskQueue, Queue<Runnable> tailTaskQueue,
-                                    RejectedExecutionHandler rejectedExecutionHandler) {
+    protected SingleThreadEventLoop(EventLoopGroup parent,
+                                    Executor executor,
+                                    boolean addTaskWakesUp, // false
+                                    Queue<Runnable> taskQueue, // 正常任务队列
+                                    Queue<Runnable> tailTaskQueue, // 收尾任务队列
+                                    RejectedExecutionHandler rejectedExecutionHandler // 正常任务队列添加满了拒绝策略
+    ) {
         super(parent, executor, addTaskWakesUp, taskQueue, rejectedExecutionHandler);
-        tailTasks = ObjectUtil.checkNotNull(tailTaskQueue, "tailTaskQueue");
+        this.tailTasks = ObjectUtil.checkNotNull(tailTaskQueue, "tailTaskQueue");
     }
 
     @Override
@@ -144,12 +148,12 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
 
     @Override
     protected void afterRunningAllTasks() {
-        runAllTasksFrom(tailTasks);
+        this.runAllTasksFrom(tailTasks);
     }
 
     @Override
-    protected boolean hasTasks() {
-        return super.hasTasks() || !tailTasks.isEmpty();
+    protected boolean hasTasks() { // taskQueue常规任务队列 tailTasks收尾任务队列 至少有任务待执行
+        return super.hasTasks() || !this.tailTasks.isEmpty();
     }
 
     @Override

@@ -174,22 +174,23 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
     }
 
     @Override
-    protected EventLoop newChild(Executor executor, Object... args) throws Exception {
-        SelectorProvider selectorProvider = (SelectorProvider) args[0];
-        SelectStrategyFactory selectStrategyFactory = (SelectStrategyFactory) args[1];
-        RejectedExecutionHandler rejectedExecutionHandler = (RejectedExecutionHandler) args[2];
+    protected EventLoop newChild(Executor executor, Object... args) throws Exception { // executor=ThreadPerTaskExecutor实例 args=[SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]
+        SelectorProvider selectorProvider = (SelectorProvider) args[0]; // Java中对IO多路复用器的实现 依赖Jdk的版本 Window=WindowsSelectorProvider MacOSX=KQueueSelectorProvider Linux=EPollSelectorProvider
+        SelectStrategyFactory selectStrategyFactory = (SelectStrategyFactory) args[1]; // DefaultSelectStrategyFactory实例 任务选择策略(如何从taskQueue任务队列中选择一个任务)
+        RejectedExecutionHandler rejectedExecutionHandler = (RejectedExecutionHandler) args[2]; // RejectedExecutionHandlers实例
         EventLoopTaskQueueFactory taskQueueFactory = null;
         EventLoopTaskQueueFactory tailTaskQueueFactory = null;
 
         int argsLength = args.length;
-        if (argsLength > 3) taskQueueFactory = (EventLoopTaskQueueFactory) args[3];
-        if (argsLength > 4) tailTaskQueueFactory = (EventLoopTaskQueueFactory) args[4];
+        if (argsLength > 3) taskQueueFactory = (EventLoopTaskQueueFactory) args[3]; // null
+        if (argsLength > 4) tailTaskQueueFactory = (EventLoopTaskQueueFactory) args[4]; // null
         return new NioEventLoop(this, // this是NioEventLoopGroup实例 在构造NioEventLoop的时候将线程是实例传给parent属性
-                executor,
+                executor, // ThreadPerTaskExecutor实例
                 selectorProvider,
-                selectStrategyFactory.newSelectStrategy(),
-                rejectedExecutionHandler,
-                taskQueueFactory,
-                tailTaskQueueFactory); // NioEventLoop就是NioEventLoopGroup这个线程池中的个体 相当于线程池中的线程 在每个NioEventLoop实例内部都持有一个自己Thread实例
+                selectStrategyFactory.newSelectStrategy(), // taskQueue任务队列中有任务就poll一个任务出来执行 空的就阻塞等待任务到来
+                rejectedExecutionHandler, // taskQueue任务队列满了拒绝策略(向上抛异常)
+                taskQueueFactory, // 常规任务队列
+                tailTaskQueueFactory // 收尾任务队列
+        ); // NioEventLoop就是NioEventLoopGroup这个线程池中的个体 相当于线程池中的线程 在每个NioEventLoop实例内部都持有一个自己Thread实例
     }
 }
