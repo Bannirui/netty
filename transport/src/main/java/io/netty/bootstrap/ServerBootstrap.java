@@ -138,29 +138,37 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     }
 
     @Override
-    void init(Channel channel) {
+    void init(Channel channel) { // NioServerSocketChannel实例
         setChannelOptions(channel, newOptionsArray(), logger);
         setAttributes(channel, newAttributesArray());
 
         ChannelPipeline p = channel.pipeline(); // channel内部的pipeline实例 在创建NioServerSocketChannel的时候一起创建了pipeline实例(head和tail节点)
 
-        final EventLoopGroup currentChildGroup = childGroup;
-        final ChannelHandler currentChildHandler = childHandler;
+        final EventLoopGroup currentChildGroup = childGroup; // workerGroup
+        final ChannelHandler currentChildHandler = childHandler; // worker
         final Entry<ChannelOption<?>, Object>[] currentChildOptions = newOptionsArray(childOptions);
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = newAttributesArray(childAttrs);
 
-        p.addLast(new ChannelInitializer<Channel>() { // 往pipeline中添加一个handler 这个handler是ChannelInitializer的实例 该处涉及到pipeline中的辅助类ChannelInitializer 它本身也是一个handler(Inbound类型) 它的作用仅仅是辅助其他的handler加入到pipeline中
+        p.addLast(new ChannelInitializer<Channel>() { // 往ServerSocketChannel的pipeline中添加一个handler 这个handler是ChannelInitializer的实例 该处涉及到pipeline中的辅助类ChannelInitializer 它本身也是一个handler(Inbound类型) 它的作用仅仅是辅助其他的handler加入到pipeline中
             @Override
-            public void initChannel(final Channel ch) {
+            public void initChannel(final Channel ch) { // 新创建的Channel
                 final ChannelPipeline pipeline = ch.pipeline();
                 ChannelHandler handler = config.handler(); // 这个handler是在ServerBootstrap::handler()方法中指定的handler实例
                 if (handler != null) pipeline.addLast(handler); // 将handler添加到pipeline中
 
-                ch.eventLoop().execute(new Runnable() {
+                ch.eventLoop().execute(new Runnable() { // 往NioEventLoop线程添加一个任务 这个任务就是给Channel指定一个处理器 处理器的功能是接收客户端请求
                     @Override
                     public void run() {
-                        pipeline.addLast(new ServerBootstrapAcceptor( // 添加一个handler到pipeline中 ServerBootstrapAcceptor这个handler目的是用来接收客户端请求的
-                                ch, currentChildGroup, currentChildHandler, currentChildOptions, currentChildAttrs));
+                        pipeline.addLast(
+                                // 添加一个handler到pipeline中 ServerBootstrapAcceptor这个handler目的是用来接收客户端请求的
+                                new ServerBootstrapAcceptor(
+                                    ch, // 新创建的Channel 服务端接收连接请求之后创建出来的Channel
+                                    currentChildGroup, // workerGroup
+                                    currentChildHandler,
+                                    currentChildOptions,
+                                    currentChildAttrs
+                                )
+                        );
                     }
                 });
             }
@@ -182,15 +190,19 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     private static class ServerBootstrapAcceptor extends ChannelInboundHandlerAdapter {
 
-        private final EventLoopGroup childGroup;
+        private final EventLoopGroup childGroup; // workerGroup
         private final ChannelHandler childHandler;
         private final Entry<ChannelOption<?>, Object>[] childOptions;
         private final Entry<AttributeKey<?>, Object>[] childAttrs;
         private final Runnable enableAutoReadTask;
 
         ServerBootstrapAcceptor(
-                final Channel channel, EventLoopGroup childGroup, ChannelHandler childHandler,
-                Entry<ChannelOption<?>, Object>[] childOptions, Entry<AttributeKey<?>, Object>[] childAttrs) {
+                final Channel channel, // Channel
+                EventLoopGroup childGroup, // workerGroup
+                ChannelHandler childHandler,
+                Entry<ChannelOption<?>, Object>[] childOptions,
+                Entry<AttributeKey<?>, Object>[] childAttrs
+        ) {
             this.childGroup = childGroup;
             this.childHandler = childHandler;
             this.childOptions = childOptions;
@@ -217,18 +229,14 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
              */
             final Channel child = (Channel) msg;
 
-            child.pipeline().addLast(childHandler);
+            child.pipeline().addLast(this.childHandler);
 
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
 
             try {
-                /**
-                 * childGroup是初始化的work线程
-                 * worker线程注册channel
-                 * 这里的register()方法跟boss线程一样 通过next()方法选择一个线程进行注册
-                 */
-                childGroup.register(child).addListener(new ChannelFutureListener() {
+                this.childGroup.register(child) // 在workerGroup线程组中轮询出一个NioEventLoop线程跟child这个Channel绑定
+                        .addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {
                         if (!future.isSuccess()) {

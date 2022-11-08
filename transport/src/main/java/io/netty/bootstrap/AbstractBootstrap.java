@@ -253,7 +253,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     /**
      * Create a new {@link Channel} and bind it.
      */
-    public ChannelFuture bind(int inetPort) { //    NioServerSocketChannel触发Channel创建
+    public ChannelFuture bind(int inetPort) { // 异步非阻塞方法 真正执行bind操作的是NIO线程(NioEventLoop线程)
         return this.bind(new InetSocketAddress(inetPort));
     }
 

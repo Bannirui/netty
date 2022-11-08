@@ -103,7 +103,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private final int maxPendingTasks;
     private final RejectedExecutionHandler rejectedExecutionHandler;
 
-    private long lastExecutionTime;
+    private long lastExecutionTime; // 最近一次执行任务的时间
 
     @SuppressWarnings({ "FieldMayBeFinal", "unused" })
     private volatile int state = ST_NOT_STARTED;
@@ -394,8 +394,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             if (this.runAllTasksFrom(this.taskQueue)) ranAtLeastOne = true;
         } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
 
-        if (ranAtLeastOne) lastExecutionTime = ScheduledFutureTask.nanoTime();
-        afterRunningAllTasks();
+        if (ranAtLeastOne) this.lastExecutionTime = ScheduledFutureTask.nanoTime(); // 尝试更新线程最近一次执行任务的时间
+        this.afterRunningAllTasks(); // 收尾任务
         return ranAtLeastOne;
     }
 
@@ -470,7 +470,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * Poll all tasks from the task queue and run them via {@link Runnable#run()} method.  This method stops running
      * the tasks in the task queue and returns if it ran longer than {@code timeoutNanos}.
      */
-    protected boolean runAllTasks(long timeoutNanos) {
+    protected boolean runAllTasks(long timeoutNanos) { // 带超时控制 每执行一批任务(64个)才统计一次时间 因为统计时间这个操作本身会触发系统调用 比较耗时 所以不能为了辅助性工作影响主线任务
         // 定时任务队列中聚合任务 也就是从定时任务中找到可以执行的任务添加到普通任务队列taskQueue中
         fetchFromScheduledTaskQueue();
         // 从普通taskQ中拿一个任务
