@@ -79,10 +79,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * 1 通过EventLoopGroup或者EventLoop提供的API提交的任务(execute/submit...)
      * 2 从定时任务队列中找到的符合运行时机的定时任务
      * 3 WAKEUP_TASK
+     *
+     * 实现上在NioEventLoop和DefaultEventLoop上差异
+     *     - NioEventLoop 通过复用器阻塞/唤起实现线程的阻塞/唤起 不需要队列具有阻塞机制(阻塞队列反而会降低存取效率)
+     *     - DefaultEventLoop 通过阻塞队列机制实现线程的阻塞/唤起
      */
     private final Queue<Runnable> taskQueue;
 
-    private volatile Thread thread;
+    private volatile Thread thread; // 持有一个线程 每个EventLoop绑定一个线程
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
     private final Executor executor; // 线程执行器 触发它的execute()方法就会创建一个真正的线程
@@ -165,14 +169,18 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * @param maxPendingTasks   the maximum number of pending tasks before new tasks will be rejected.
      * @param rejectedHandler   the {@link RejectedExecutionHandler} to use.
      */
-    protected SingleThreadEventExecutor(EventExecutorGroup parent, Executor executor,
-                                        boolean addTaskWakesUp, int maxPendingTasks,
-                                        RejectedExecutionHandler rejectedHandler) {
+    protected SingleThreadEventExecutor(EventExecutorGroup parent, // EventLoop线程归属的管理器
+                                        Executor executor, // 线程执行器
+                                        boolean addTaskWakesUp, // EventLoop是单线程 不能让一个线程没有任务时候处于空转状态 以事件响应机制来驱动线程执行 所以需要一定机制让那个线程阻塞/唤起 在NioEventLoop中利用IO多路复用器机制实现 在DefaultEventLoop中使用阻塞队列机制实现 addTaskWakesUp为true表示使用阻塞队列实现
+                                        int maxPendingTasks,
+                                        RejectedExecutionHandler
+                                                rejectedHandler
+    ) {
         super(parent);
-        this.addTaskWakesUp = addTaskWakesUp;
+        this.addTaskWakesUp = addTaskWakesUp; // NioEventLoop和DefaultEventLoop差异
         this.maxPendingTasks = Math.max(16, maxPendingTasks);
         this.executor = ThreadExecutorMap.apply(executor, this);
-        taskQueue = newTaskQueue(this.maxPendingTasks);
+        this.taskQueue = this.newTaskQueue(this.maxPendingTasks); // NioEventLoop和DefaultEventLoop差异
         rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler");
     }
 
@@ -204,7 +212,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * calls on the this {@link Queue} it may make sense to {@code @Override} this and return some more performant
      * implementation that does not support blocking operations at all.
      */
-    protected Queue<Runnable> newTaskQueue(int maxPendingTasks) {
+    protected Queue<Runnable> newTaskQueue(int maxPendingTasks) { // DefaultEventLoop不支持复用器 阻塞点发生在任务队列的存取上 因此任务队列的实现使用阻塞队列 NioEventLoop阻塞点发生在复用器上 因此不需要依赖阻塞队列 自己单独去实现
         return new LinkedBlockingQueue<Runnable>(maxPendingTasks);
     }
 
@@ -254,11 +262,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
         BlockingQueue<Runnable> taskQueue = (BlockingQueue<Runnable>) this.taskQueue;
         for (;;) {
-            ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
+            ScheduledFutureTask<?> scheduledTask = super.peekScheduledTask();
             if (scheduledTask == null) {
                 Runnable task = null;
                 try {
-                    task = taskQueue.take();
+                    task = taskQueue.take(); // 阻塞点 阻塞队列为空了发生线程阻塞
                     if (task == WAKEUP_TASK) {
                         task = null;
                     }
@@ -271,7 +279,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 Runnable task = null;
                 if (delayNanos > 0) {
                     try {
-                        task = taskQueue.poll(delayNanos, TimeUnit.NANOSECONDS);
+                        task = taskQueue.poll(delayNanos, TimeUnit.NANOSECONDS); // 阻塞点
                     } catch (InterruptedException e) {
                         // Waken up.
                         return null;
@@ -283,7 +291,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                     // This is for example true for the read task of OIO Transport
                     // See https://github.com/netty/netty/issues/1614
                     fetchFromScheduledTaskQueue();
-                    task = taskQueue.poll();
+                    task = taskQueue.poll(); // 非阻塞方式
                 }
 
                 if (task != null) {

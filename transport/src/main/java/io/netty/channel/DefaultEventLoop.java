@@ -49,7 +49,7 @@ public class DefaultEventLoop extends SingleThreadEventLoop {
     @Override
     protected void run() {
         for (;;) {
-            Runnable task = takeTask();
+            Runnable task = super.takeTask();
             if (task != null) {
                 task.run();
                 updateLastExecutionTime();
