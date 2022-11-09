@@ -56,7 +56,8 @@ import static io.netty.channel.internal.ChannelUtils.MAX_BYTES_PER_GATHERING_WRI
  */
 public class NioSocketChannel extends AbstractNioByteChannel implements io.netty.channel.socket.SocketChannel {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(NioSocketChannel.class);
-    private static final SelectorProvider DEFAULT_SELECTOR_PROVIDER = SelectorProvider.provider();
+
+    private static final SelectorProvider DEFAULT_SELECTOR_PROVIDER = SelectorProvider.provider(); // 依赖Jdk版本->依赖OS类型
 
     private static SocketChannel newSocket(SelectorProvider provider) {
         try {
@@ -66,7 +67,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
              *
              *  See <a href="https://github.com/netty/netty/issues/2308">#2308</a>.
              */
-            return provider.openSocketChannel(); // 创建JDK NIO的一个SocketChanel实例
+            return provider.openSocketChannel(); // Java根据系统调用socket()创建Socket实例 返回的fd封装成SocketChannel
         } catch (IOException e) {
             throw new ChannelException("Failed to open a socket.", e);
         }
@@ -104,9 +105,10 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     public NioSocketChannel(Channel parent, SocketChannel socket) {
         /**
          * 调用父类构造器 设置属性 设置SocketChannel的非阻塞模式
-         *
-         * parent代表创建自身channel(NioServerSocketChannel)
          * socket代表jdk底层的socketChannel
+         * parent的含义在于标识SocketChannel的创建场景
+         *     - 客户端主动创建Socket跟服务端Socket通信 parent为null
+         *     - 服务端Socket监听到有来自客户端的连接后 会copy服务端Socket的创建参数clone一个新的Socket用于跟客户端通信 parent为服务端Socket
          */
         super(parent, socket);
         /**

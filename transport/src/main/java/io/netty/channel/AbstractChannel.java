@@ -43,6 +43,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractChannel.class);
 
+    /**
+     * parent的含义在于标识SocketChannel的创建场景
+     *     - 客户端主动创建Socket跟服务端Socket通信 parent为null
+     *     - 服务端Socket监听到有来自客户端的连接后 会copy服务端Socket的创建参数clone一个新的Socket用于跟客户端通信 parent为服务端Socket
+     */
     private final Channel parent;
     private final ChannelId id;
     private final Unsafe unsafe;
@@ -52,8 +57,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     private volatile SocketAddress localAddress;
     private volatile SocketAddress remoteAddress;
-    private volatile EventLoop eventLoop; // 每个Channel跟一个NioEventLoop线程绑定
-    private volatile boolean registered;
+    private volatile EventLoop eventLoop; // 每个Channel跟一个NioEventLoop线程绑定 绑定成功之后在Channel内维护这个阈值
+    private volatile boolean registered; // 标识Channel跟EventLoop线程是否绑定
     private boolean closeInitiated;
     private Throwable initialCloseCause;
 
@@ -476,11 +481,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         @Override
         public final void register(EventLoop eventLoop, final ChannelPromise promise) {
             ObjectUtil.checkNotNull(eventLoop, "eventLoop");
-            if (isRegistered()) {
+            if (isRegistered()) { // 判定Channel是有跟NioEventLoop线程绑定过了 一个Channel终身只能跟一个NioEventLoop线程绑定
                 promise.setFailure(new IllegalStateException("registered to an event loop already"));
                 return;
             }
-            if (!isCompatible(eventLoop)) {
+            if (!isCompatible(eventLoop)) { // Channel只能跟NioEventLoop这种实现进行绑定 都是网络模型下的概念
                 promise.setFailure(new IllegalStateException("incompatible event loop type: " + eventLoop.getClass().getName()));
                 return;
             }
@@ -491,7 +496,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
              *
              * IO的本质就是数据在IO设备和内存之间的复制 所有的复制操作都交给EventLoop处理
              */
-            AbstractChannel.this.eventLoop = eventLoop;
+            AbstractChannel.this.eventLoop = eventLoop; // 这就是所谓的绑定关系
 
             /**
              * <p>条件分支的判断是为了区别当前线程是不是eventLoop线程 比如从main线程跟着{@link AbstractBootstrap#bind(int)}方法过来 main线程不是eventLoop就进{@code else}分支</p>
@@ -502,9 +507,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 try {
                     /**
                      * <p>{@code eventLoop.execute(...)}说明了eventLoop本质就是一个线程池 开启一个eventLoop线程 {@code AbstractUnsafe.this.register0(promise)}就是在开启线程之后 通过eventLoop线程执行 也就是{@code if}分支中的代码逻辑</p>
-                     * 提交任务给eventLoop eventLoop中的线程会负责调用register0()方法
+                     * 提交任务给NioEventLoop NioEventLoop线程会负责调用register0()方法
+                     *
+                     * 到这里为止 NioEventLoop中的Thread实例还没有创建 Channel实例register到了NioEventLoopGroup线程池中的某个NioEventLoop实例 后续该channel的所有操作都由这个NioEventLoop实例完成 register操作提交到eventLoop之后 直接返回promise实例 剩下的register0()操作属于异步操作
                      */
-                    eventLoop.execute(new Runnable() { // 到这里为止 NioEventLoop中的Thread实例还没有创建 Channel实例register到了NioEventLoopGroup线程池中的某个NioEventLoop实例 后续该channel的所有操作都由这个NioEventLoop实例完成 register操作提交到eventLoop之后 直接返回promise实例 剩下的register0()操作属于异步操作
+                    eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
                             // 实际的注册
@@ -527,31 +534,35 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 boolean firstRegistration = neverRegistered;
                 /**
                  * 实际的注册
-                 * jdk底层操作 将channel注册到selector上
+                 * jdk底层操作 将channel注册到selector复用器上
                  */
                 AbstractChannel.this.doRegister();
                 neverRegistered = false;
-                registered = true;
+                this.registered = true; // 标识Channel跟NioEventLoop绑定成功
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
                 /**
-                 * 触发事件
-                 * 涉及到ChannelInitializer::init()方法将ChannelInitializer内部添加的handlers添加到pipeline中
+                 * 发布handlerAdd事件
+                 * 让pipeline中handler关注handlerAdded(...)的handler执行
                  */
                 pipeline.invokeHandlerAddedIfNeeded();
 
                 safeSetSuccess(promise); // 设置当前promise状态为success 当前register()方法是在eventLoop中的线程中执行的 需要通知提交register操作的那个线程
                 /**
-                 * 触发注册成功事件
+                 * 事件响应式编程的体现点
+                 * 当前的register操作已经成功 该事件应该被pipeline上所有关心register事件的handler感知
+                 * 发布register事件
+                 * 让pipeline中handler关注channelRegistered(...)的handler执行
                  */
-                pipeline.fireChannelRegistered(); // 当前的register操作已经成功 该事件应该被pipeline上所有关心register事件的handler感知 往pipeline中扔一个事件
+                pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
                 if (isActive()) { // active指channel已经打开
                     if (firstRegistration) { // 如果该channel是第一次执行register 那么往pipeline中丢一个fireChannelActive事件
                         /**
-                         * 传播active事件
+                         * 发布active事件
+                         * 让pipeline中handler关注invokeChannelActive(...)的handler执行
                          */
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {

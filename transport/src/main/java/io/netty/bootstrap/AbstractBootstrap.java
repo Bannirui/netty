@@ -119,7 +119,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      *
      * 其作用就是提供SocketChannel的无参构造器 生成ChannelFactory
      */
-    public B channel(Class<? extends C> channelClass) { // 将ReflectiveChannelFactory的实例赋值给channelFactory属性
+    public B channel(Class<? extends C> channelClass) { // 指定Channel类型->根据Channel特定实现的无参构造方法->反射创建Channel实例
         return this.channelFactory(new ReflectiveChannelFactory<C>(channelClass)); // NioServerSocket的class对象
     }
 
@@ -127,7 +127,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * @deprecated Use {@link #channelFactory(io.netty.channel.ChannelFactory)} instead.
      */
     @Deprecated
-    public B channelFactory(ChannelFactory<? extends C> channelFactory) {
+    public B channelFactory(ChannelFactory<? extends C> channelFactory) { // channelFactory的setter
         if (this.channelFactory != null) throw new IllegalStateException("channelFactory set already");
         /**
          * {@link io.netty.channel.ChannelFactory}本质就是一个Channel工厂->阈维护了一个无参构造器->通过newInstance()创建Channel实例
@@ -253,7 +253,12 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     /**
      * Create a new {@link Channel} and bind it.
      */
-    public ChannelFuture bind(int inetPort) { // 异步非阻塞方法 真正执行bind操作的是NIO线程(NioEventLoop线程)
+    /**
+     * 异步非阻塞方法
+     *     - 异步 比如main线程发起调用 真正的bind结果main线程并不是直接去取 而是将来真正bind成功的线程将结果回调
+     *     - 非阻塞 比如main线程发起调用 最后真正执行bind操作的是其他线程(Nio线程 NioEventLoop线程)
+     */
+    public ChannelFuture bind(int inetPort) {
         return this.bind(new InetSocketAddress(inetPort));
     }
 
@@ -280,14 +285,14 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
-        final ChannelFuture regFuture = this.initAndRegister(); // 完成了channel的register操作
+        final ChannelFuture regFuture = this.initAndRegister(); // 触发Channel的创建和绑定到boss线程组的EventLoop线程上 异步线程
         final Channel channel = regFuture.channel(); // 获取channel NioServerSocketChannel的实例
         if (regFuture.cause() != null) return regFuture;
 
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
-            doBind0(regFuture, channel, localAddress, promise); // 绑定
+            doBind0(regFuture, channel, localAddress, promise); // 给boss线程添加个任务 让boss线程执行bind操作 bind操作的时机是在Channel绑定boss线程成功之后
             return promise;
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
@@ -339,20 +344,21 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
              *
              * <p><h3>netty的channel实例化</h3></p>
              * <ul>
-             *     <li>创建jdk的ServerSocketChannel</li>
+             *     <li>创建jdk的ServerSocketChannel和SocketChannel封装成Netty中的NioServerSocketChannel和NioSocketChannel</li>
              *     <li>给每个netty channel分配属性</li>
              *     <ul>
              *         <li>id</li>
              *         <li>unsafe实例</li>
-             *         <li>pipeline实例(此时pipeline中只有head和tail两个handler)</li>
+             *         <li>pipeline实例</li>
              *     </ul>
              *     <li>netty的NioServerSocketChannel组合jdk的ServerSocketChannel</li>
-             *     <li>服务端NioServerSocketChannel关注OP_ACCEPT连接事件</li>
+             *     <li>NioServerSocketChannel关注OP_ACCEPT连接事件</li>
+             *     <li>NioSocketChannel关注OP_READ可读事件</li>
              *     <li>设置jdk ServerSocketChannel的非阻塞模式</li>
              * </ul>
              *
              */
-            channel = this.channelFactory.newChannel();
+            channel = this.channelFactory.newChannel(); // 通过Factory触发NioServerSocketChannel和SocketChannel的反射创建实例
             /**
              * <p><h3>channel初始化</h3></p>
              * <p>将辅助handler {@link ChannelInitializer}的实例 通过{@link ServerBootstrap#childHandler(ChannelHandler)}方法添加到channel中的pipeline中</p>
@@ -371,26 +377,31 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
         /**
          * 至此在register(...)方法之前 已经完成的工作
-         * <ul>
-         *     <li>channel实例化</li>
-         *     <li>pipeline实例化</li>
-         *     <li>unsafe实例化</li>
-         *     <li>设置了jdk channel的非阻塞模式</li>
-         *     <li>pipeline中添加了head和tail以及{@link ChannelInitializer}辅助类的实例</li>
-         * </ul>
+         *
+         *     - channel实例
+         *         - pipeline实例化
+         *             - pipeline中添加了{@link ChannelInitializer}辅助类的实例 而这个辅助类的触发时机是在Channel跟EventLoop线程绑定之后
+         *         - unsafe实例
+         *         - 设置了jdk channel的非阻塞模式
+         *     - bossGroup中仅仅实例化了特定数量的EventLoop 但是此时线程并没有被真正创建
+         *     - Channel跟EventLoop没有关联
          *
          * <pre>{@code this.config().group()}返回的是{@link io.netty.channel.nio.NioEventLoopGroup}实例</pre>
+         * 对于ServerBootstrap而言是bossGroup线程组
+         * 对于Bootstrap而言只有一个group线程组
          *
-         * <p><pre>{@code register(...)}</pre>方法本质就是调用{@link io.netty.channel.nio.NioEventLoopGroup}的方法 该方法又是从父类{@link MultithreadEventLoopGroup#register(Channel)}中继承的
-         * 其中的逻辑<pre>{@code this.next()}</pre>方法是从{@link io.netty.channel.nio.NioEventLoopGroup}中选择一个{@link io.netty.channel.nio.NioEventLoop}出来 最终执行的是{@link io.netty.channel.nio.NioEventLoop}的<pre>{@code register()}</pre>方法
-         * 这个方法又是从{@link SingleThreadEventLoop#register(Channel)}中继承来的</p>
+         * 线程组的register(...)方法就是轮询一个EventLoop线程出来执行register(...)方法 Channel跟EventLoop关联起来
+         *     - 关联操作执行结束后 触发ChannelInitializer中的方法
+         *         - 唤起EventLoop线程
+         *             - 添加ServerBootstrapAcceptor处理来自客户端的连接
+         *             - EventLoop线程循环
          *
-         * <p>因此<pre>{@code register(...)}</pre>最终实现是在{@link SingleThreadEventLoop#register(Channel)}中</p>
+         * 并且一旦Channel一旦跟EventLoop绑定 以后Channel的所有事件都由这个EventLoop线程处理
          */
         ChannelFuture regFuture = this
                 .config()
-                .group() // {#link ServerBootstrap#group()}或者{@link Bootstrap#group()}传进去的
-                .register(channel);
+                .group() // {#link ServerBootstrap#group()}或者{@link Bootstrap#group()}传进去的 比如在服务端就是boss线程组 客户端只有一个group
+                .register(channel); // 异步编程 这一步就是绑定Channel跟EventLoop线程
         if (regFuture.cause() != null) { // 在register过程中发生异常
             if (channel.isRegistered()) channel.close();
             else channel.unsafe().closeForcibly();
@@ -404,8 +415,13 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         //    i.e. It's safe to attempt bind() or connect() now:
         //         because bind() or connect() will be executed *after* the scheduled registration task is executed
         //         because register(), bind(), and connect() are all bound to the same thread.
-
-        return regFuture; // 执行到这 说明后续可以进行NioSocketChannel::connect()方法或者NioServerSocketChannel::bind()方法 两种情况 1 register动作是在eventLoop中发起 那么到这里的时候 register一定已经完成了 2 如果register任务已经提交到eventLoop中 也就是进到了eventLoop中的taskQueue中 由于后续的connect和bind方法也会进入到同一个eventLoop的taskQueue中 所以一定会先执行register成功 在执行connect和bind方法
+        /**
+         * // 执行到这 说明后续可以进行NioSocketChannel::connect()方法或者NioServerSocketChannel::bind()方法
+         * 两种情况
+         *     -1 register动作是在eventLoop中发起 那么到这里的时候 register一定已经完成了
+         *     -2 如果register任务已经提交到eventLoop中 也就是进到了eventLoop中的taskQueue中 由于后续的connect和bind方法也会进入到同一个eventLoop的taskQueue中 所以一定会先执行register成功 再执行connect和bind方法
+         */
+        return regFuture;
     }
 
     abstract void init(Channel channel) throws Exception;
@@ -413,6 +429,10 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     private static void doBind0(final ChannelFuture regFuture, final Channel channel, final SocketAddress localAddress, final ChannelPromise promise) {
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.
+        /**
+         * 这个方法的执行时机是在NioServerSocketChannel绑定boss线程成功之后
+         * 此刻给boss线程提交一个任务(执行bind操作)
+         */
         channel.eventLoop().execute(new Runnable() {
             @Override
             public void run() {

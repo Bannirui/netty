@@ -644,11 +644,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     final void invokeHandlerAddedIfNeeded() {
         assert channel.eventLoop().inEventLoop();
-        if (firstRegistration) {
+        if (firstRegistration) { // 保证了这个方法只会在Channel注册到IO多路复用器上之后才会执行
             firstRegistration = false;
             // We are now registered to the EventLoop. It's time to call the callbacks for the ChannelHandlers,
             // that were added before the registration was done.
-            callHandlerAddedForAllHandlers();
+            this.callHandlerAddedForAllHandlers();
         }
     }
 
@@ -810,7 +810,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline fireChannelRegistered() {
-        AbstractChannelHandlerContext.invokeChannelRegistered(head); // 参数为pipeline中的head节点
+        AbstractChannelHandlerContext.invokeChannelRegistered(head); // 参数为pipeline中的head节点 明显的责任链模式 让链表上所有处理器都走一遍事件
         return this;
     }
 
@@ -1132,7 +1132,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         PendingHandlerCallback task = added ? new PendingHandlerAddedTask(ctx) : new PendingHandlerRemovedTask(ctx);
         PendingHandlerCallback pending = pendingHandlerCallbackHead;
         if (pending == null) {
-            pendingHandlerCallbackHead = task;
+            this.pendingHandlerCallbackHead = task;
         } else {
             // Find the tail of the linked-list.
             while (pending.next != null) {

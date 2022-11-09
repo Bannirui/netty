@@ -142,29 +142,37 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         setChannelOptions(channel, newOptionsArray(), logger);
         setAttributes(channel, newAttributesArray());
 
-        ChannelPipeline p = channel.pipeline(); // channel内部的pipeline实例 在创建NioServerSocketChannel的时候一起创建了pipeline实例(head和tail节点)
+        ChannelPipeline p = channel.pipeline(); // channel内部的pipeline实例 在创建NioServerSocketChannel的时候一起创建了pipeline实例
 
         final EventLoopGroup currentChildGroup = childGroup; // workerGroup
-        final ChannelHandler currentChildHandler = childHandler; // worker
+        final ChannelHandler currentChildHandler = childHandler; // workerHandler
         final Entry<ChannelOption<?>, Object>[] currentChildOptions = newOptionsArray(childOptions);
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = newAttributesArray(childAttrs);
 
-        p.addLast(new ChannelInitializer<Channel>() { // 往ServerSocketChannel的pipeline中添加一个handler 这个handler是ChannelInitializer的实例 该处涉及到pipeline中的辅助类ChannelInitializer 它本身也是一个handler(Inbound类型) 它的作用仅仅是辅助其他的handler加入到pipeline中
+        /**
+         * 往ServerSocketChannel的pipeline中添加一个handler 这个handler是ChannelInitializer的实例 该处涉及到pipeline中的辅助类ChannelInitializer 它本身也是一个handler(Inbound类型) 它的作用仅仅是辅助其他的handler加入到pipeline中
+         * ChannelInitializer的initChannel方法触发时机是在Channel绑定到EventLoop线程之后* 那么到时候会发生
+         *     - 添加一个ServerBootstrap指定的bossHandler(也可能没指定)
+         *     - 唤醒EventLoop线程让它添加ServerBootstrapAcceptor这个handler
+         *
+         * 下面这段代码的目的在于一定会唤醒EventLoop线程 并一定添加了ServerBootstrapAcceptor
+         */
+        p.addLast(new ChannelInitializer<Channel>() {
             @Override
-            public void initChannel(final Channel ch) { // 新创建的Channel
-                final ChannelPipeline pipeline = ch.pipeline();
-                ChannelHandler handler = config.handler(); // 这个handler是在ServerBootstrap::handler()方法中指定的handler实例
-                if (handler != null) pipeline.addLast(handler); // 将handler添加到pipeline中
+            public void initChannel(final Channel ch) { // ChannelInitializer的这个方法会在Channel绑定到EventLoop线程之后被回调
+                final ChannelPipeline pipeline = ch.pipeline(); // NioServerSocketChannel的pipeline
+                ChannelHandler handler = config.handler(); // 这个handler是在ServerBootstrap::handler()方法中指定的workerHandler
+                if (handler != null) pipeline.addLast(handler); // 将bossHandler添加到NioServerSocket的pipeline中
 
-                ch.eventLoop().execute(new Runnable() { // 往NioEventLoop线程添加一个任务 这个任务就是给Channel指定一个处理器 处理器的功能是接收客户端请求
+                ch.eventLoop().execute(new Runnable() { // 往NioEventLoop线程添加一个任务 boss线程会执行这个任务 就是给Channel指定一个处理器 处理器的功能是接收客户端请求
                     @Override
                     public void run() {
                         pipeline.addLast(
                                 // 添加一个handler到pipeline中 ServerBootstrapAcceptor这个handler目的是用来接收客户端请求的
                                 new ServerBootstrapAcceptor(
-                                    ch, // 新创建的Channel 服务端接收连接请求之后创建出来的Channel
+                                    ch, // NioServerSocketChannel
                                     currentChildGroup, // workerGroup
-                                    currentChildHandler,
+                                    currentChildHandler, // workerHandler
                                     currentChildOptions,
                                     currentChildAttrs
                                 )
@@ -191,15 +199,15 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     private static class ServerBootstrapAcceptor extends ChannelInboundHandlerAdapter {
 
         private final EventLoopGroup childGroup; // workerGroup
-        private final ChannelHandler childHandler;
+        private final ChannelHandler childHandler; // workerHandler
         private final Entry<ChannelOption<?>, Object>[] childOptions;
         private final Entry<AttributeKey<?>, Object>[] childAttrs;
         private final Runnable enableAutoReadTask;
 
         ServerBootstrapAcceptor(
-                final Channel channel, // Channel
+                final Channel channel, // NioServerSocketChannel
                 EventLoopGroup childGroup, // workerGroup
-                ChannelHandler childHandler,
+                ChannelHandler childHandler, // worekrHandler
                 Entry<ChannelOption<?>, Object>[] childOptions,
                 Entry<AttributeKey<?>, Object>[] childAttrs
         ) {
@@ -223,7 +231,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
         @Override
         @SuppressWarnings("unchecked")
-        public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        public void channelRead(ChannelHandlerContext ctx, Object msg) { // 服务端收到连接或者收到消息 对于服务端视角而言 都是收到了可读事件
             /**
              * msg参数就是在{@link AbstractNioMessageChannel#read()}方法中调用{@code pipeline.fireChannelRead(readBuf.get(i))}方法的入参NioSocketChannel
              */

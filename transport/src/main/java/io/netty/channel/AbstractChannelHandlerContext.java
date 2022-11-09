@@ -125,8 +125,8 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         return this;
     }
 
-    static void invokeChannelRegistered(final AbstractChannelHandlerContext next) {
-        EventExecutor executor = next.executor(); // next从head开始 执行head的invokeChannelRegistered()方法
+    static void invokeChannelRegistered(final AbstractChannelHandlerContext next) { // 责任链模式 pipeline上所有handler都处理一遍事件
+        EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
             next.invokeChannelRegistered();
         } else {

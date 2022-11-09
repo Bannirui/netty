@@ -51,7 +51,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             InternalLoggerFactory.getInstance(AbstractNioChannel.class);
 
     private final SelectableChannel ch;
-    protected final int readInterestOp;
+    protected final int readInterestOp; // 关注的IO事件
     volatile SelectionKey selectionKey;
     boolean readPending;
     private final Runnable clearReadPendingRunnable = new Runnable() {
@@ -79,9 +79,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
         super(parent);
         this.ch = ch; // jdk的channel 绑定jdk底层的ServerSocketChannel netty的channel跟jdk的channel关系是组合关系 在netty的channel中有个jdk的channel成员变量 这个成员变量定义在AbstractNioChannel中
-        this.readInterestOp = readInterestOp; // 保存SelectionKey信息 客户端关注读取事件 服务端关注连接事件(NioSocketChannel的OP_READ NioServerSocketChannel的OP_ACCEPT)
+        this.readInterestOp = readInterestOp; // Channel关注的IO事件 NioSocketChannel关注OP_READ可读事件 NioServerSocketChannel关注OP_ACCEPT连接事件
         try {
-            ch.configureBlocking(false); // 将jdk的channel设置为非阻塞模式
+            ch.configureBlocking(false); // 将jdk的channel设置为非阻塞模式(系统调用fcntl)
         } catch (IOException e) {
             try {
                 ch.close();
@@ -405,7 +405,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     }
 
     @Override
-    protected void doBeginRead() throws Exception {
+    protected void doBeginRead() throws Exception { // 让Channel注册到复用器上关注读事件
         // Channel.read() or ChannelHandlerContext.read() was called
         final SelectionKey selectionKey = this.selectionKey; // 获取到selectionKey
         if (!selectionKey.isValid())
@@ -414,11 +414,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         readPending = true;
         // 感兴趣的事件
         final int interestOps = selectionKey.interestOps();
-        if ((interestOps & readInterestOp) == 0) { // 判断是不是对任何事件都不监听
-            /**
-             * 注册完accept事件之后就可以轮询selector 监听是否有新连接接入了
-             * 将之前的accept事件注册 readInterest代表可以读取一个新连接的意思
-             */
+        if ((interestOps & readInterestOp) == 0) { // 此前这个Channel已经注册过一次复用器 但是当时可能没有关注读事件 现在判定一下 此前没有关注过读事件 就把读事件关注也加到复用器上
             selectionKey.interestOps(interestOps | readInterestOp);
         }
     }
