@@ -493,7 +493,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             return promise;
         }
 
-        final AbstractChannelHandlerContext next = findContextOutbound(MASK_CONNECT);
+        final AbstractChannelHandlerContext next = findContextOutbound(MASK_CONNECT); // 在客户端初始化时 pipeline中只有3个handler(head bizHandler tail) 现在找到了head(HeadContext)
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
             next.invokeConnect(remoteAddress, localAddress, promise);

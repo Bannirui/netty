@@ -119,7 +119,7 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
     /**
      * Connect a {@link Channel} to the remote peer.
      */
-    public ChannelFuture connect(String inetHost, int inetPort) { // NioSocketChannel触发Channel创建
+    public ChannelFuture connect(String inetHost, int inetPort) { // 异步
         return this.connect(InetSocketAddress.createUnresolved(inetHost, inetPort));
     }
 
@@ -152,14 +152,14 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
      * @see #connect()
      */
     private ChannelFuture doResolveAndConnect(final SocketAddress remoteAddress, final SocketAddress localAddress) {
-        final ChannelFuture regFuture = this.initAndRegister(); // 完成了channel的register操作
+        final ChannelFuture regFuture = super.initAndRegister(); // 跟NioServerSocketChanel::bind一样都是在父类中实现
         final Channel channel = regFuture.channel();
 
         if (regFuture.isDone()) {
             if (!regFuture.isSuccess()) {
                 return regFuture;
             }
-            return this.doResolveAndConnect0(channel, remoteAddress, localAddress, channel.newPromise());
+            return this.doResolveAndConnect0(channel, remoteAddress, localAddress, channel.newPromise()); // 触发了NioSocketChannel绑定的NioEventLoop线程启动
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
@@ -199,7 +199,7 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
 
             if (!resolver.isSupported(remoteAddress) || resolver.isResolved(remoteAddress)) {
                 // Resolver has no idea about what to do with the specified remote address or it's resolved already.
-                doConnect(remoteAddress, localAddress, promise);
+                doConnect(remoteAddress, localAddress, promise); // 通过向NioEventLoop线程提交任务方式触发线程启动 并让该线程真正发起系统调用connect
                 return promise;
             }
 
@@ -242,6 +242,7 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.
         final Channel channel = connectPromise.channel();
+        // 向NioEventLoop线程提交了个异步任务
         channel.eventLoop().execute(new Runnable() {
             @Override
             public void run() {

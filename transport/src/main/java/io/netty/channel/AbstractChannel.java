@@ -538,7 +538,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                  */
                 AbstractChannel.this.doRegister();
                 neverRegistered = false;
-                this.registered = true; // 标识Channel跟NioEventLoop绑定成功
+                AbstractChannel.this.registered = true; // 标识Channel跟NioEventLoop绑定成功
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.

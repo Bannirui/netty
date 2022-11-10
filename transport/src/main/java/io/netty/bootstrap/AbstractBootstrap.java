@@ -292,7 +292,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
-            doBind0(regFuture, channel, localAddress, promise); // 给boss线程添加个任务 让boss线程执行bind操作 bind操作的时机是在Channel绑定boss线程成功之后
+            doBind0(regFuture, channel, localAddress, promise); // 此时Channel已经跟NioEventLoop线程绑定了 给boss线程添加个任务 让boss线程执行bind操作 这个地方也是真正启动boss线程的时机
             return promise;
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
@@ -329,7 +329,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      *
      * <p></p>
      */
-    final ChannelFuture initAndRegister() { // 完成了channel的register操作
+    final ChannelFuture initAndRegister() { // Channel的创建 初始化(pipeline) 注册到IO多路复用器上(完成注册之后触发pipeline中ChannelInitializer方法回调)
         /**
          * 具体实现是{@link NioServerSocketChannel}的实例或者{@link NioSocketChannel}的实例
          */
@@ -349,7 +349,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
              *     <ul>
              *         <li>id</li>
              *         <li>unsafe实例</li>
-             *         <li>pipeline实例</li>
+             *         <li>pipeline实例 pipeline中有两个handler(head和tail 它们不是哑节点)</li>
              *     </ul>
              *     <li>netty的NioServerSocketChannel组合jdk的ServerSocketChannel</li>
              *     <li>NioServerSocketChannel关注OP_ACCEPT连接事件</li>
@@ -376,7 +376,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
 
         /**
-         * 至此在register(...)方法之前 已经完成的工作
+         * 至此NioEventLoop线程还没启动
+         * 在register(...)方法之前 已经完成的工作
          *
          *     - channel实例
          *         - pipeline实例化
@@ -401,7 +402,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         ChannelFuture regFuture = this
                 .config()
                 .group() // {#link ServerBootstrap#group()}或者{@link Bootstrap#group()}传进去的 比如在服务端就是boss线程组 客户端只有一个group
-                .register(channel); // 异步编程 这一步就是绑定Channel跟EventLoop线程
+                .register(channel); // 异步编程 这一步就是绑定Channel跟EventLoop线程 并且往NioEventLoop中扔了个异步任务 此时NioEventLoop线程被唤醒去执行注册复用器的动作
         if (regFuture.cause() != null) { // 在register过程中发生异常
             if (channel.isRegistered()) channel.close();
             else channel.unsafe().closeForcibly();

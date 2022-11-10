@@ -1359,7 +1359,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 ChannelHandlerContext ctx,
                 SocketAddress remoteAddress, SocketAddress localAddress,
                 ChannelPromise promise) {
-            unsafe.connect(remoteAddress, localAddress, promise);
+            unsafe.connect(remoteAddress, localAddress, promise); // 用unsafe操作OS底层系统调用
         }
 
         @Override
