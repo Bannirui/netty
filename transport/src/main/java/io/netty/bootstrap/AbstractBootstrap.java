@@ -285,10 +285,32 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
-        final ChannelFuture regFuture = this.initAndRegister(); // 触发Channel的创建和绑定到boss线程组的EventLoop线程上 异步线程
+        /**
+         * 完成几个步骤
+         *     - Netty的Channel创建(本质是通过反射方式 NioServerSocketChannel和NioSocketChannel的无参构造器)
+         *     - Channel中维护几个重要组件
+         *         - unsafe 操作读写
+         *         - eventLoop Channel绑定的NioEventLoop Channel注册到这个NioEventLoop上的复用器Selector
+         *         - pipeline 维护handler
+         *     - 绑定关联Netty的Channel和NioEventLoop线程关系
+         *     - Jdk的Channel注册到NioEventLoop的复用器Selector上
+         *     - 注册复用器成功后发布事件
+         *         - handlersAdded事件 -> 会触发ChannelInitializer的方法回调
+         *         - active事件
+         *         - ...
+         */
+        final ChannelFuture regFuture = this.initAndRegister();
         final Channel channel = regFuture.channel(); // 获取channel NioServerSocketChannel的实例
         if (regFuture.cause() != null) return regFuture;
 
+        /**
+         * Channel注册复用器是NioEventLoop线程的异步任务
+         * 这里是为了保证注册复用器的操作先于bind
+         *     - 复用器注册完触发ChannelInitializer方法回调 向pipeline中添加必要的handler 保证后续发生读写时 Channel都能依赖上完整的handler链
+         *     - 前一个复用器注册时异步执行
+         *         - 如果已经复用器注册已经完成 pipeline中handler已经初始化好 向NioEventLoop提交任务让它执行bind
+         *         - 如果复用器注册还没完成 说明这个任务还在NioEventLoop的任务队列taskQueue中 这个时候再向NioEventLoop提交一个异步任务 这两个任务的顺序通过任务队列保证了相对顺序
+         */
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
@@ -297,7 +319,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
-            regFuture.addListener(new ChannelFutureListener() {
+            regFuture.addListener(new ChannelFutureListener() { // nio线程注册复用器是异步操作 给这个操作加个回调 等nio线程完成注册复用器之后 让它执行doBind0(...)
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
                     Throwable cause = future.cause();
@@ -310,7 +332,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
                         // See https://github.com/netty/netty/issues/2586
                         promise.registered();
 
-                        doBind0(regFuture, channel, localAddress, promise);
+                        doBind0(regFuture, channel, localAddress, promise); // NioEventLoop线程执行bind(headHandler处理器真正处理) bind完成后通过向NioEventLoop提交异步任务方式 让NioEventLoop发布一个NioServerSocketChannel的active事件
                     }
                 }
             });
@@ -319,17 +341,20 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     /**
-     * <p>{@link AbstractBootstrap#channelFactory}的属性赋值发生于{@link AbstractBootstrap#channel(Class)}->{@link AbstractBootstrap#channelFactory(io.netty.channel.ChannelFactory)}->{@link AbstractBootstrap#channelFactory(ChannelFactory)}</p>
-     * <p>channelFactory被赋值为{@link ReflectiveChannelFactory}的实例 传入{@link io.netty.channel.socket.nio.NioServerSocketChannel}或者{@link io.netty.channel.socket.nio.NioSocketChannel}的class对象 调用{@link ReflectiveChannelFactory#ReflectiveChannelFactory(Class)}构造方法创建{@link ReflectiveChannelFactory}的实例</p>
-     * <p>因此
-     * <pre>
-     *     {@code channel = this.channelFactory.newChannel()}
-     * </pre>
-     * 所调用的<pre>{@code newChannel()}</pre>方法本质上就是调用{@link ReflectiveChannelFactory#newChannel()} 该方法的执行逻辑就是反射创建{@link io.netty.channel.socket.nio.NioServerSocketChannel}或者{@link io.netty.channel.socket.nio.NioSocketChannel}实例</p>
-     *
-     * <p></p>
+     * 完成几个步骤
+     *     - Netty的Channel创建(本质是通过反射方式 NioServerSocketChannel和NioSocketChannel的无参构造器)
+     *     - Channel中维护几个重要组件
+     *         - unsafe 操作读写
+     *         - eventLoop Channel绑定的NioEventLoop Channel注册到这个NioEventLoop上的复用器Selector
+     *         - pipeline 维护handler
+     *     - 绑定关联Netty的Channel和NioEventLoop线程关系
+     *     - Jdk的Channel注册到NioEventLoop的复用器Selector上
+     *     - 注册复用器成功后发布事件
+     *         - handlersAdded事件 -> 会触发ChannelInitializer的方法回调
+     *         - active事件
+     *         - ...
      */
-    final ChannelFuture initAndRegister() { // Channel的创建 初始化(pipeline) 注册到IO多路复用器上(完成注册之后触发pipeline中ChannelInitializer方法回调)
+    final ChannelFuture initAndRegister() {
         /**
          * 具体实现是{@link NioServerSocketChannel}的实例或者{@link NioSocketChannel}的实例
          */
@@ -360,10 +385,13 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
              */
             channel = this.channelFactory.newChannel(); // 通过Factory触发NioServerSocketChannel和SocketChannel的反射创建实例
             /**
-             * <p><h3>channel初始化</h3></p>
-             * <p>将辅助handler {@link ChannelInitializer}的实例 通过{@link ServerBootstrap#childHandler(ChannelHandler)}方法添加到channel中的pipeline中</p>
+             *  - pipeline中添加个ChannelInitializer
+             *      - 等待NioServerSocketChannel注册复用器后被回调
+             *          - 添加workerHandler
+             *          - 提交异步任务
+             *              - 在pipeline中添加ServerBootstrapAcceptor
              */
-            this.init(channel); // 对channel中持有的pipeline中handler的添加
+            this.init(channel);
         } catch (Throwable t) {
             if (channel != null) {
                 // channel can be null if newChannel crashed (eg SocketException("too many open files"))
@@ -391,18 +419,28 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
          * 对于ServerBootstrap而言是bossGroup线程组
          * 对于Bootstrap而言只有一个group线程组
          *
-         * 线程组的register(...)方法就是轮询一个EventLoop线程出来执行register(...)方法 Channel跟EventLoop关联起来
-         *     - 关联操作执行结束后 触发ChannelInitializer中的方法
-         *         - 唤起EventLoop线程
+         * 线程组的register(...)方法就是从group中轮询出来一个NioEventLoop线程执行register(...)方法 Channel跟NioEventLoop关联起来并注册到NioEventLoop的Selector上
+         *     - 注册复用器结束后 NioEventLoop线程发布一些事件让关注的handler执行
+         *         - handlersAdd(...)事件 触发
+         *         - ...
          *             - 添加ServerBootstrapAcceptor处理来自客户端的连接
-         *             - EventLoop线程循环
+         *             - NioEventLoop线程循环
          *
          * 并且一旦Channel一旦跟EventLoop绑定 以后Channel的所有事件都由这个EventLoop线程处理
+         * 所谓的注册指的是将Java的Channel注册到复用器Selector上
+         *     - 逻辑绑定映射关系 Netty Channel跟NioEventLoop关系绑定
+         *     - 物理注册复用器
+         *         - 通过向NioEventLoop提交任务方式启动NioEventLoop线程
+         *         - NioEventLoop线程将Jdk的Channel注册到Selector复用器上
+         *             - Socket注册复用器 不关注事件
+         *             - 触发事件 让pipeline中的handler关注响应(此刻pipeline中有head ChannelInitializer实例 tail)
+         *                 - 发布handlerAdd事件 触发ChannelInitializer方法执行
+         *                 - 发布register事件
          */
         ChannelFuture regFuture = this
                 .config()
                 .group() // {#link ServerBootstrap#group()}或者{@link Bootstrap#group()}传进去的 比如在服务端就是boss线程组 客户端只有一个group
-                .register(channel); // 异步编程 这一步就是绑定Channel跟EventLoop线程 并且往NioEventLoop中扔了个异步任务 此时NioEventLoop线程被唤醒去执行注册复用器的动作
+                .register(channel);
         if (regFuture.cause() != null) { // 在register过程中发生异常
             if (channel.isRegistered()) channel.close();
             else channel.unsafe().closeForcibly();
@@ -427,19 +465,16 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     abstract void init(Channel channel) throws Exception;
 
+    /**
+     * Channel中发生的读写数据操作都会按照InBound和OutBound类型交给pipeline 让关注的handler执行
+     */
     private static void doBind0(final ChannelFuture regFuture, final Channel channel, final SocketAddress localAddress, final ChannelPromise promise) {
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.
-        /**
-         * 这个方法的执行时机是在NioServerSocketChannel绑定boss线程成功之后
-         * 此刻给boss线程提交一个任务(执行bind操作)
-         */
+        // 提交异步任务让NioEventLoop线程执行bind 此时pipeline的handler(head workerHandler tail) bind操作属于OutBound类型 因此从tail往前找handler headHandler负责真正执行bind
         channel.eventLoop().execute(new Runnable() {
             @Override
-            public void run() {
-                /**
-                 * 绑定端口 调用到{@link AbstractChannel#bind(SocketAddress, ChannelPromise)}
-                 */
+            public void run() { // NioEventLoop执行真正的bind操作 添加监听器处理异步操作结果 NioEventLoop执行bind结束后 它自己知道bind结果 处理ChannelFutureListener.CLOSE_ON_FAILURE的逻辑
                 if (regFuture.isSuccess()) channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
                 else promise.setFailure(regFuture.cause());
             }

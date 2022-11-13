@@ -87,7 +87,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
      * Set to {@code true} once the {@link AbstractChannel} is registered.Once set to {@code true} the value will never
      * change.
      */
-    private boolean registered;
+    private boolean registered; // 标识Channel已经注册到了IO多路复用器上
 
     protected DefaultChannelPipeline(Channel channel) {
         this.channel = ObjectUtil.checkNotNull(channel, "channel");
@@ -208,12 +208,12 @@ public class DefaultChannelPipeline implements ChannelPipeline {
              */
             newCtx = newContext(group, filterName(name, handler), handler);
             // 添加HandlerContext
-            addLast0(newCtx);
+            this.addLast0(newCtx);
 
             // If the registered is false it means that the channel was not registered on an eventLoop yet.
             // In this case we add the context to the pipeline and add a task that will call
             // ChannelHandler.handlerAdded(...) once the channel is registered.
-            if (!registered) { // 是否已经注册
+            if (!registered) {
                 newCtx.setAddPending();
                 callHandlerCallbackLater(newCtx, true);
                 return this;
@@ -810,7 +810,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline fireChannelRegistered() {
-        AbstractChannelHandlerContext.invokeChannelRegistered(head); // 参数为pipeline中的head节点 明显的责任链模式 让链表上所有处理器都走一遍事件
+        AbstractChannelHandlerContext.invokeChannelRegistered(head); // 参数为pipeline中的head节点 明显的责任链模式 让链表上所有处理器都走一遍事件 InBound类型事件 从head->tail
         return this;
     }
 
@@ -969,11 +969,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     @Override
     public final ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
         /**
-         * bind是交给pipeline来执行的 bind属于Outbound类型的操作 从pipeline的tail开始
+         * bind是交给pipeline来执行的 bind属于Outbound类型的操作 从pipeline的tail开始往前找 tailHandler->workerHandler->headHandler
          * head和tail的基类是AbstractChannelHandlerContext 具体实现维护在当前类的两个内部类中HeadContext和TailContext
-         * 所以bind方法会跳到内部类的对应方法中
-         * {@link HeadContext#bind(ChannelHandlerContext, SocketAddress, ChannelPromise)}
-         * {@link TailContext#bind(SocketAddress, ChannelPromise)}
+         * {@link HeadContext}
+         * {@link TailContext}
+         * 最终bind的操作由headHandler来处理
          */
         return tail.bind(localAddress, promise);
     }
@@ -1109,7 +1109,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             assert !registered;
 
             // This Channel itself was registered.
-            registered = true;
+            this.registered = true;
 
             pendingHandlerCallbackHead = this.pendingHandlerCallbackHead;
             // Null out so it can be GC'ed.
@@ -1350,7 +1350,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
 
         @Override
-        public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) {
+        public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) { // bind最终实现在headHandler
             unsafe.bind(localAddress, promise);
         }
 

@@ -483,19 +483,20 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
 
     @Override
     protected void run() {
-        int selectCnt = 0; // 当前EventLoop事件循环器代表的线程执行复用器select空轮询操作计数
+        int selectCnt = 0; // 当前EventLoop事件循环器代表的线程执行复用器select空轮询操作计数(Java对EPoll多路复用的实现缺陷 以阻塞方式执行复用器select 在没有读写事件时可能也会返回 产生空轮询 导致CPU负载)
         for (;;) {
             try {
                 int strategy;
                 try {
                     /**
                      * strategy这个值只有3种情况 决定复用器如何执行(阻塞/非阻塞)
-                     *     - 任务队列为空->-1->复用器即将以阻塞方式执行一次
-                     *     - 任务队列(常规任务队列taskQueue+收尾任务队列tailTasks)有任务 复用器以非阻塞方式执行一次
+                     *     - 非IO任务队列为空->-1->复用器即将以阻塞方式执行一次看看有没有IO任务
+                     *     - 非IO任务队列(常规任务队列taskQueue+收尾任务队列tailTasks)有任务 复用器以非阻塞方式执行一次看看有没有IO任务
                      *         - 没有IO事件->0
                      *         - 有IO事件->Channel数量
                      *
-                     * 这样设计的方式是不要让阻塞调用复用器导致既有任务不能即使执行
+                     * 这样设计的方式是不要让复用器阻塞调用导致非IO任务不能及时执行
+                     * 也就是尽可能多执行IO任务和非IO任务
                      */
                     strategy = this.selectStrategy.calculateStrategy(this.selectNowSupplier, super.hasTasks());
                     switch (strategy) {
@@ -528,44 +529,36 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                     continue;
                 }
 
-                selectCnt++; // 前面任务队列有任务 执行了一次复用器是空轮询
+                selectCnt++; // 复用器select次数 但是疯狂自增的场景只会发生在没有非IO任务 本应该阻塞在复用器上的线程却一直select时 也就是空轮询
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
                 final int ioRatio = this.ioRatio; // 默认值是50
                 boolean ranTasks; // 标识taskQueue中任务都被执行过一轮
-                if (ioRatio == 100) { // 100->先执行IO操作 然后在finally代码块中执行taskQueue中的任务
+                if (ioRatio == 100) { // 100->先处理IO任务 再执行非IO任务
                     try {
-                        /**
-                         * 处理IO事件
-                         */
-                        if (strategy > 0) this.processSelectedKeys();
+                        if (strategy > 0) this.processSelectedKeys(); // 处理IO任务
                     } finally {
                         // Ensure we always run tasks.
-                        ranTasks = super.runAllTasks();
+                        ranTasks = super.runAllTasks(); // 处理所有的非IO任务
                     }
-                } else if (strategy > 0) { // 不是100 根据IO操作耗时 限制非IO操作耗时
-                    final long ioStartTime = System.nanoTime();
+                } else if (strategy > 0) { // 不是100 先保证处理完所有IO任务 如果此时非IO任务很多(还是把所有非IO任务都执行完 耗时很多的话) 可能导致新到的IO任务不能得到及时处理 所以通过IoRatio参数控制非IO任务的处理时长
+                    final long ioStartTime = System.nanoTime(); // 记录IO任务处理开始时间
                     try {
-                        /**
-                         * 执行IO操作
-                         * 处理轮询到的key
-                         */
-                        this.processSelectedKeys();
+                        this.processSelectedKeys(); // 处理IO任务
                     } finally {
                         // Ensure we always run tasks.
-                        // 计算耗时 IO操作耗时
+                        // 计算耗时 IO任务处理耗时
                         final long ioTime = System.nanoTime() - ioStartTime;
                         /**
-                         * 执行task
-                         * ioRatio的默认值是50 所以runAllTasks()方法最终的入参就是ioTime
+                         * 计算非IO任务可以处理的时长 限定非IO任务处理时间 处理非IO任务
                          */
                         ranTasks = super.runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
                 } else
-                    ranTasks = super.runAllTasks(0); // This will run the minimum number of tasks
+                    ranTasks = super.runAllTasks(0); // This will run the minimum number of tasks 非IO任务处理时间形参为0 但是内部实现对超时统计是有条件的 因此至少一次超时统计内这个时间段的非IO任务可以有机会处理
 
                 if (ranTasks || strategy > 0) selectCnt = 0;
-                else if (this.unexpectedSelectorWakeup(selectCnt)) selectCnt = 0;
+                else if (this.unexpectedSelectorWakeup(selectCnt)) selectCnt = 0; // 任务判定可能发生了空轮询 如果发生了空轮询场景 就通过重建复用器方式尽量避免再次发生空轮询
             } catch (CancelledKeyException e) {
                 // Harmless exception - log anyway
             } catch (Error e) {
@@ -621,11 +614,13 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     private void processSelectedKeys() { // IO事件处理(IO事件到达)
         /**
          * selectedKeys是经过netty优化过的数据结构替代了jdk原生的方式 如果经过select()操作监听到了事件 selectedKeys的数组就会有值
+         *     - Netty复用器 数组
+         *     - Jdk原生复用器 hash表
          */
-        if (this.selectedKeys != null) // 有分支判断的原因是因为优化过的Selector存放IO事件的数据结构也不一样了(Netty用的数组 Java用的HashSet) 因此要单独处理
+        if (this.selectedKeys != null)
             this.processSelectedKeysOptimized(); // 使用的Selector是Netty优化过的
         else
-            this.processSelectedKeysPlain(this.selector.selectedKeys());
+            this.processSelectedKeysPlain(this.selector.selectedKeys()); // Jdk原生的复用器
     }
 
     @Override
@@ -687,18 +682,18 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     private void processSelectedKeysOptimized() {
-        for (int i = 0; i < this.selectedKeys.size; ++i) { // 轮询数组中的Channel
+        for (int i = 0; i < this.selectedKeys.size; ++i) { // 轮询数组中的Channel 这些Channel是Jdk原生的 并不是Netty中的NioChannel
             final SelectionKey k = selectedKeys.keys[i]; // Channel
             /**
              * 数组当前引用设置为null 因为selector不会自动清空
              * 与使用原生selector时候 通过遍历selector.selectedKeys()的set的时候 拿到key之后要执行remove()是一样的
              */
             selectedKeys.keys[i] = null;
-            // 获取channel NioServerSocketChannel
+            // 获取channel NioServerSocketChannel/NioSocketChannel 最终的事件是要交给Netty中Channel->Channel关联的pipeline->pipeline中的handler 因此利用attachment关联Netty中的Channel与Jdk中Channel的映射关系
             final Object a = k.attachment();
             // 根据channel类型调用不同的处理方法
-            if (a instanceof AbstractNioChannel) // IO事件由Netty负责处理
-                processSelectedKey(k, (AbstractNioChannel) a);
+            if (a instanceof AbstractNioChannel) // IO事件由Netty负责处理(NioServerSocketChannel和NioSocketChannel的抽象都是AbstractNioChannel)
+                this.processSelectedKey(k, (AbstractNioChannel) a);
             else { // IO事件由用户自定义处理
                 @SuppressWarnings("unchecked")
                 NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
@@ -717,12 +712,9 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     }
 
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
+        final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe(); // Socket上发生的读写最终不是交给Java的Channel处理 而是交给Netty的Channel去处理(Netty的Channel->pipeline->handler)
         /**
-         * 获取channel中的unsafe
-         */
-        final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
-        /**
-         * 如果key是不合法的 说明这个channel可能有问题
+         * 如果Jdk底层的Channel是不合法的 说明这个channel可能有问题
          */
         if (!k.isValid()) {
             final EventLoop eventLoop;
@@ -745,11 +737,11 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
             return;
         }
         /**
-         * 执行到这 说明当前的key是合法的
+         * 执行到这 说明当前的Jdk的Channel是合法的
          */
         try {
-            int readyOps = k.readyOps(); // Channel发生的事件
-            if ((readyOps & SelectionKey.OP_CONNECT) != 0) { // Channel发生了连接事件
+            int readyOps = k.readyOps(); // Jdk的Channel发生的事件
+            if ((readyOps & SelectionKey.OP_CONNECT) != 0) { // Jdk的Channel发生了连接事件
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
                 int ops = k.interestOps();
@@ -759,7 +751,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                 unsafe.finishConnect();
             }
             // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
-            if ((readyOps & SelectionKey.OP_WRITE) != 0) { // Channel发生了写事件
+            if ((readyOps & SelectionKey.OP_WRITE) != 0) { // Jdk的Channel发生了写事件
                 // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
                 ch.unsafe().forceFlush();
             }
@@ -838,8 +830,8 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
 
     @Override
     protected void wakeup(boolean inEventLoop) { // 唤醒阻塞在复用器上的线程 NioEventLoop跟线程绑定了 自己阻塞在了复用器上后只能通过其他线程唤醒自己
-        if (!inEventLoop && nextWakeupNanos.getAndSet(AWAKE) != AWAKE) { // 唤醒条件(NioEventLoop外部线程 NioEventLoop线程阻塞在复用器上[不是AWAKE已经被唤醒状态])
-            this.selector.wakeup(); // 唤醒阻塞在复用器上的线程
+        if (!inEventLoop && nextWakeupNanos.getAndSet(AWAKE) != AWAKE) { // 唤醒条件(NioEventLoop外部线程 NioEventLoop线程阻塞在复用器上[不是AWAKE已经被唤醒状态]) 有可能外界多个线程向NioEventLoop提交异步任务 通过CAS方式控制并发下保证只有一个线程唤醒阻塞在复用器上的NioEventLoop线程(可以不控制 但是Selector复用器wakeup这个系统调用会发生用户态切换内核态 开销比较大)
+            this.selector.wakeup(); // 唤醒阻塞在复用器上的NioEventLoop线程
         }
     }
 

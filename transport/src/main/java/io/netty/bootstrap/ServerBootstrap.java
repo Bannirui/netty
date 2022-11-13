@@ -137,6 +137,13 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         return this;
     }
 
+    /**
+     * - pipeline中添加个ChannelInitializer
+     *     - 等待NioServerSocketChannel注册复用器后被回调
+     *         - 添加workerHandler
+     *         - 提交异步任务
+     *             - 在pipeline中添加ServerBootstrapAcceptor
+     */
     @Override
     void init(Channel channel) { // NioServerSocketChannel实例
         setChannelOptions(channel, newOptionsArray(), logger);
@@ -151,20 +158,19 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
         /**
          * 往ServerSocketChannel的pipeline中添加一个handler 这个handler是ChannelInitializer的实例 该处涉及到pipeline中的辅助类ChannelInitializer 它本身也是一个handler(Inbound类型) 它的作用仅仅是辅助其他的handler加入到pipeline中
-         * ChannelInitializer的initChannel方法触发时机是在Channel绑定到EventLoop线程之后* 那么到时候会发生
-         *     - 添加一个ServerBootstrap指定的bossHandler(也可能没指定)
-         *     - 唤醒EventLoop线程让它添加ServerBootstrapAcceptor这个handler
-         *
-         * 下面这段代码的目的在于一定会唤醒EventLoop线程 并一定添加了ServerBootstrapAcceptor
+         * ChannelInitializer的initChannel方法触发时机是在Channel注册到NioEventLoop复用器之后(NioEventLoop启动执行注册操作) 那么到时候会发生回调
+         *     - 添加一个ServerBootstrap指定的bossHandler(也可能没指定) 比如指定了workerHandler 那么回调执行后 pipeline存在 headHandler-workerHandler-tailHandler
+         *     - 向NioEventLoop提交添加handler的异步任务
+         *         - 等NioEventLoop把这个异步任务执行完了之后 pipeline中变成 head-workerHandler-ServerBootstrapAcceptor-tail
          */
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
-            public void initChannel(final Channel ch) { // ChannelInitializer的这个方法会在Channel绑定到EventLoop线程之后被回调
+            public void initChannel(final Channel ch) { // ChannelInitializer的这个方法会在Channel注册到EventLoop线程上复用器之后被回调
                 final ChannelPipeline pipeline = ch.pipeline(); // NioServerSocketChannel的pipeline
                 ChannelHandler handler = config.handler(); // 这个handler是在ServerBootstrap::handler()方法中指定的workerHandler
                 if (handler != null) pipeline.addLast(handler); // 将bossHandler添加到NioServerSocket的pipeline中
 
-                ch.eventLoop().execute(new Runnable() { // 往NioEventLoop线程添加一个任务 boss线程会执行这个任务 就是给Channel指定一个处理器 处理器的功能是接收客户端请求
+                ch.eventLoop().execute(new Runnable() { // 往NioEventLoop线程添加一个任务 boss的NioEventLoop线程会执行这个任务 就是给Channel指定一个处理器 处理器的功能是接收客户端请求
                     @Override
                     public void run() {
                         pipeline.addLast(

@@ -75,7 +75,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                     SingleThreadEventExecutor.class, ThreadProperties.class, "threadProperties");
 
     /**
-     * 常规任务队列
+     * 非IO任务队列
      * 1 通过EventLoopGroup或者EventLoop提供的API提交的任务(execute/submit...)
      * 2 从定时任务队列中找到的符合运行时机的定时任务
      * 3 WAKEUP_TASK
@@ -86,7 +86,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      */
     private final Queue<Runnable> taskQueue;
 
-    private volatile Thread thread; // 持有一个线程 每个EventLoop绑定一个线程
+    private volatile Thread thread; // 线程执行器持有一个线程 每个Executor持有一个线程(相当于有且只有一个线程的线程池)
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
     private final Executor executor; // 线程执行器 触发它的execute()方法就会创建一个真正的线程
@@ -236,7 +236,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         return pollTaskFrom(taskQueue);
     }
 
-    protected static Runnable pollTaskFrom(Queue<Runnable> taskQueue) { // 从常规任务队列中取任务
+    protected static Runnable pollTaskFrom(Queue<Runnable> taskQueue) { // 从非IO任务队列中取任务
         for (;;) {
             Runnable task = taskQueue.poll();
             if (task != WAKEUP_TASK) {
@@ -303,7 +303,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     /**
      * 从定时任务队列中找到可执行的定时任务
-     * 从定时任务中找到可以执行的任务将任务添加到普通任务队列taskQueue中
+     * 从定时任务中找到可以执行的任务将任务添加到非IO任务队列taskQueue中
      */
     private boolean fetchFromScheduledTaskQueue() {
         if (this.scheduledTaskQueue == null || this.scheduledTaskQueue.isEmpty()) return true;
@@ -398,7 +398,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         boolean ranAtLeastOne = false;
 
         do {
-            fetchedAll = this.fetchFromScheduledTaskQueue(); // 尝试从定时任务队列中找到所有可执行的定时任务放到常规任务队列taskQueue中
+            fetchedAll = this.fetchFromScheduledTaskQueue(); // 尝试从定时任务队列中找到所有可执行的定时任务放到非IO任务队列taskQueue中
             if (this.runAllTasksFrom(this.taskQueue)) ranAtLeastOne = true;
         } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
 
@@ -441,7 +441,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * @return {@code true} if at least one task was executed.
      */
     protected final boolean runAllTasksFrom(Queue<Runnable> taskQueue) {
-        Runnable task = this.pollTaskFrom(taskQueue);
+        Runnable task = this.pollTaskFrom(taskQueue); // 非IO任务
         if (task == null) {
             return false;
         }
@@ -852,11 +852,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         /**
          * NioEventLoop只有一个线程 且它的阻塞点只有在IO多路复用器操作上
          * 因此当前添加任务的线程
-         *     - NioEventLoop线程 说明它压根没有被阻塞 而且肯定已经处于运行中状态
-         *         - 这个线程已经被创建执行 那么这个新添加的任务迟早会被取出来执行
+         *     - NioEventLoop线程自己给自己添加任务 说明它压根没有被阻塞 而且肯定已经处于运行中状态
+         *         - 这个线程已经被创建执行 那么这个新添加的任务被放到了非IO任务队列中 迟早会被取出来执行
          *     - 不是NioEventLoop线程 是其他线程往NioEventLoop添加任务
-         *         - 如果这个线程还没被创建执行 那么相当于任务裹挟着线程进行延迟创建并执行任务
-         *         - 当任务队列没有任务 也没有IO事件到达时 NioEventLoop线程迟早会阻塞在复用器上
+         *         - 如果NioEventLoop线程还没被创建执行 那么相当于任务裹挟着线程进行延迟创建并执行任务
+         *         - 非IO任务队列没有任务 也没有IO事件到达时 NioEventLoop线程迟早会阻塞在复用器上
          *             - 阻塞期间有IO事件到达 退出select阻塞继续工作
          *             - 有定时任务还可能超时退出select NioEventLoop线程继续工作
          *             - 没有定时任务就永远阻塞 唤醒的方式 只有外部线程往NioEventLoop添加新任务触发selector复用器的wakeup()
@@ -864,7 +864,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         boolean inEventLoop = super.inEventLoop();
         this.addTask(task); // 添加任务到taskQueue中 如果任务队列已经满了 就触发拒绝策略(抛异常)
         if (!inEventLoop) {
-            this.startThread(); // 如果不是NioEventLoop内部的线程提交的任务 判断下线程是否已经启动 如果还没有启动就启动线程
+            this.startThread(); // NioEventLoop线程创建启动的时机就是提交进来的第一个异步任务
             if (this.isShutdown()) {
                 boolean reject = false;
                 try {
@@ -971,9 +971,9 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private static final long SCHEDULE_PURGE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
 
-    private void startThread() { // 判断线程是否已经启动 决定是否要进行启动操作
+    private void startThread() { // NioEventLoop线程被创建启动的时机(原子变量+CAS方式确保NioEventLoop线程只能被启动一次)
         if (state == ST_NOT_STARTED) {
-            if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) { // state状态标识线程已经启动
+            if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) { // state状态标识线程已经启动 CAS确保线程只能被创建启动一次
                 boolean success = false;
                 try {
                     this.doStartThread(); // 启动线程 在每个NioEventLoop只会被执行一次 保证NioEventLoop:线程=1:1
@@ -1010,13 +1010,17 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         this.executor.execute(new Runnable() { // 这个executor就是实例化NioEventLoop时候传进来的ThreadPerTaskExecutor实例 每次来一个任务创建一个线程 调用execute()方法就会创建一个新的线程 也就是真正的线程Thread实例 Netty中Reactor模型=IO复用器select+多EventLoop线程 所以实际上这个executor线程执行器执行时机有且只有一次 保证一个EventLoop永远只跟一个线程实例班绑定
             @Override
             public void run() {
-                thread = Thread.currentThread(); // 将executor线程池中创建的线程设置为NioEventLoop的线程
+                /**
+                 * 将Executor线程执行器跟线程绑定 线程跟NioEventLoop已经绑定 相当于是NioEvent->Thread->Executor 至于为什么多加一层的映射 是为了利用Executor抽象出来的更好用的API
+                 * 记录线程也会为了后面判断执行线程是不是就是NioEventLoop线程自己 通过线程切换方式 保证既定任务整个生命周期都是同一个NioEventLoop线程在执行
+                 */
+                thread = Thread.currentThread();
                 if (interrupted) thread.interrupt();
 
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
-                    SingleThreadEventExecutor.this.run(); // 执行run()方法 该方法为抽象方法 在NioEventLoop中有实现 这个方法不会轻易地结束 需要向jdk线程池的worker那样 不断地循环获取新的任务 不断做select操作和轮询taskQueue这个任务队列
+                    SingleThreadEventExecutor.this.run(); // 执行run()方法 该方法为抽象方法 在NioEventLoop中有实现 线程的死循环(不断地处理IO任务和非IO任务)
                     success = true;
                 } catch (Throwable t) {
                 } finally {

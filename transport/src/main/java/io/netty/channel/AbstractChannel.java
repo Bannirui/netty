@@ -18,7 +18,6 @@ package io.netty.channel;
 import io.netty.bootstrap.AbstractBootstrap;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.nio.AbstractNioByteChannel;
-import io.netty.channel.nio.AbstractNioMessageChannel;
 import io.netty.channel.socket.ChannelOutputShutdownEvent;
 import io.netty.channel.socket.ChannelOutputShutdownException;
 import io.netty.util.DefaultAttributeMap;
@@ -74,7 +73,6 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
      */
     /**
      * <p><em>unsafe</em>属性赋值
-     * 方法调用链 {@link AbstractChannel#newUnsafe()}->{@link AbstractNioMessageChannel#newUnsafe()}-><pre>{@code  new NioMessageUnsafe()}</pre>->{@link io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe}实例</p>
      */
     protected AbstractChannel(Channel parent) {
         this.parent = parent;
@@ -271,8 +269,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     }
 
     @Override
-    public ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
-        return this.pipeline.bind(localAddress, promise); // 通过pipeline绑定端口 这个pipeline就是channel初始化时创建的pipeline
+    public ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) { // Channel上pipeline中handler 责任链处理
+        return this.pipeline.bind(localAddress, promise);
     }
 
     @Override
@@ -478,6 +476,17 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             return remoteAddress0();
         }
 
+        /**
+         * Java的Channel注册到复用器Selector上
+         *     - 逻辑绑定映射关系 Netty Channel跟NioEventLoop关系绑定
+         *     - 物理注册复用器
+         *         - 通过向NioEventLoop提交任务方式启动NioEventLoop线程
+         *         - NioEventLoop线程将Jdk的Channel注册到Selector复用器上
+         *             - Socket注册复用器 不关注事件
+         *             - 触发事件 让pipeline中的handler关注响应(此刻pipeline中有head ChannelInitializer实例 tail)
+         *                 - 发布handlerAdd事件 触发ChannelInitializer方法执行
+         *                 - 发布register事件
+         */
         @Override
         public final void register(EventLoop eventLoop, final ChannelPromise promise) {
             ObjectUtil.checkNotNull(eventLoop, "eventLoop");
@@ -499,22 +508,18 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             AbstractChannel.this.eventLoop = eventLoop; // 这就是所谓的绑定关系
 
             /**
-             * <p>条件分支的判断是为了区别当前线程是不是eventLoop线程 比如从main线程跟着{@link AbstractBootstrap#bind(int)}方法过来 main线程不是eventLoop就进{@code else}分支</p>
+             * 本质目的是为了保证某些操作的执行权永远在Nio线程中
+             * 条件分支的判断是为了区别当前线程是不是eventLoop线程 比如从main线程跟着{@link AbstractBootstrap#bind(int)}方法过来 main线程不是eventLoop就进行线程切换
+             * 到这里为止 NioEventLoop中的Thread实例还没有创建
              */
             if (eventLoop.inEventLoop()) {
-                this.register0(promise); // 如果发起register动作的线程就是eventLoop中的线程 那么直接调用register0()方法 这个条件分之存在的必要性是: 可以unregister() 再register()
+                this.register0(promise);
             } else {
                 try {
-                    /**
-                     * <p>{@code eventLoop.execute(...)}说明了eventLoop本质就是一个线程池 开启一个eventLoop线程 {@code AbstractUnsafe.this.register0(promise)}就是在开启线程之后 通过eventLoop线程执行 也就是{@code if}分支中的代码逻辑</p>
-                     * 提交任务给NioEventLoop NioEventLoop线程会负责调用register0()方法
-                     *
-                     * 到这里为止 NioEventLoop中的Thread实例还没有创建 Channel实例register到了NioEventLoopGroup线程池中的某个NioEventLoop实例 后续该channel的所有操作都由这个NioEventLoop实例完成 register操作提交到eventLoop之后 直接返回promise实例 剩下的register0()操作属于异步操作
-                     */
+                    // NioEventLoop线程负责任务执行 执行真正的操作 将Java的Channel注册到复用器上
                     eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
-                            // 实际的注册
                             AbstractUnsafe.this.register0(promise);
                         }
                     });
@@ -526,6 +531,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
         }
 
+        /**
+         * - NioEventLoop线程执行 Jdk的Channel注册到复用器上
+         * - 发布事件
+         *     - 发布handlerAdd事件 触发ChannelInitializer方法执行
+         *     - 发布register事件
+         */
         private void register0(ChannelPromise promise) {
             try {
                 // check if the channel is still open as it could be closed in the mean time when the register
@@ -542,16 +553,29 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
+
+                /**
+                 *
+                 * 事件响应式编程的体现点
+                 * 当前的register操作已经成功 该事件应该被pipeline上所有关心register事件的handler感知
+                 * 因此需要先确保pipeline上handler已经完备 也就是ChannelInitializer这个辅助类已经完成
+                 */
+
                 /**
                  * 发布handlerAdd事件
                  * 让pipeline中handler关注handlerAdded(...)的handler执行
+                 *     - 触发ChannelInitializer方法执行
                  */
                 pipeline.invokeHandlerAddedIfNeeded();
 
                 safeSetSuccess(promise); // 设置当前promise状态为success 当前register()方法是在eventLoop中的线程中执行的 需要通知提交register操作的那个线程
+
                 /**
-                 * 事件响应式编程的体现点
-                 * 当前的register操作已经成功 该事件应该被pipeline上所有关心register事件的handler感知
+                 * 到此为止 Channel中pipeline中的handler已经完备了 可以对关注的事件进行关注了
+                 * NioServerSocketChannel的pipeline中有head、workerHandler、SocketBootstrapAcceptor、tail
+                 */
+
+                /**
                  * 发布register事件
                  * 让pipeline中handler关注channelRegistered(...)的handler执行
                  */
@@ -597,25 +621,22 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // broadcast packet on *nix if the socket is bound on non-wildcard address.
             }
 
-            boolean wasActive = isActive();
+            boolean wasActive = isActive(); // Channel执行完bind操作之后 这个标识位是true
             try {
                 /**
                  * 子类{@link io.netty.channel.socket.nio.NioServerSocketChannel#doBind(SocketAddress)} 调用jdk的channel绑定端口的逻辑
                  */
-                doBind(localAddress);
+                AbstractChannel.this.doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
                 closeIfClosed();
                 return;
             }
 
-            if (!wasActive && isActive()) { // 之前不是active 绑定之后是active
+            if (!wasActive && isActive()) { // 确保bind操作成功 发布NioServerSocket的active的事件
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {
-                        /**
-                         * 传输active事件 事件完成之后会调用{@link AbstractUnsafe#beginRead()}
-                         */
                         pipeline.fireChannelActive();
                     }
                 });

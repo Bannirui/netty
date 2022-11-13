@@ -127,6 +127,9 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     static void invokeChannelRegistered(final AbstractChannelHandlerContext next) { // 责任链模式 pipeline上所有handler都处理一遍事件
         EventExecutor executor = next.executor();
+        // 线程切换 确保NioEventLoop的执行权
+        // 已经执行过handlersAdded的回调 也就是执行过ChannelInitializer的方法 此时NioServerSocketChannel的pipeline中有head、workerHandler、SocketBootstrapAcceptor、tail
+        // 从head->tail上这个4个handler都要看一下invokeChannelRegistered这个方法有没有自己的实现
         if (executor.inEventLoop()) {
             next.invokeChannelRegistered();
         } else {
@@ -142,7 +145,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeChannelRegistered() {
         if (invokeHandler()) {
             try {
-                ((ChannelInboundHandler) handler()).channelRegistered(this); // (ChannelInboundHandler) handler()返回的是HandlerContext
+                ((ChannelInboundHandler) handler()).channelRegistered(this); // head->tail
             } catch (Throwable t) {
                 invokeExceptionCaught(t);
             }
@@ -452,8 +455,9 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     public ChannelFuture bind(final SocketAddress localAddress, final ChannelPromise promise) {
         ObjectUtil.checkNotNull(localAddress, "localAddress");
         if (isNotValidPromise(promise, false)) return promise;
-        final AbstractChannelHandlerContext next = findContextOutbound(MASK_BIND);
+        final AbstractChannelHandlerContext next = this.findContextOutbound(MASK_BIND); // 比如此刻pipeline中有3个handler(headHandler->logHandler->tailHandler) bind属于OutBound操作 从tailHandler往前找OutBound类型的handler 先找到了logHandler 但是它没有重写bind方法 而是直接调用模板方法(将任务继续往前传 让OutBound类型handler继续处理) 最终bind的实现在headHandler中
         EventExecutor executor = next.executor();
+        // 保证NioEventLoop处理同一个Channel 如果不是NioEventLoop在执行 就通过向NioEventLoop提交异步任务方式切换线程
         if (executor.inEventLoop())
             next.invokeBind(localAddress, promise);
         else {
@@ -470,7 +474,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeBind(SocketAddress localAddress, ChannelPromise promise) {
         if (invokeHandler()) {
             try {
-                ((ChannelOutboundHandler) handler()).bind(this, localAddress, promise); // (ChannelOutboundHandler) handler()返回的是pipeline中Outbound类型的handler(HandlerContext)
+                ((ChannelOutboundHandler) handler()).bind(this, localAddress, promise); // logHandler将bind往前传给headHandler 最终headHandler实现bind
             } catch (Throwable t) {
                 notifyOutboundHandlerException(t, promise);
             }
