@@ -138,7 +138,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     }
 
     /**
-     * - pipeline中添加个ChannelInitializer
+     * - NioServerSocketChannel->pipeline中添加个ChannelInitializer
      *     - 等待NioServerSocketChannel注册复用器后被回调
      *         - 添加workerHandler
      *         - 提交异步任务

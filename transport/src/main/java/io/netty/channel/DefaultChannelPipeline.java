@@ -81,7 +81,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
      * Thus full iterations to do insertions is assumed to be a good compromised to saving memory and tail management
      * complexity.
      */
-    private PendingHandlerCallback pendingHandlerCallbackHead;
+    private PendingHandlerCallback pendingHandlerCallbackHead; // 但链表数据结构 挂着的都是等待Channel注册复用器成功后执行回调的handler(比如ChannelInitializer实例)
 
     /**
      * Set to {@code true} once the {@link AbstractChannel} is registered.Once set to {@code true} the value will never
@@ -213,9 +213,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             // If the registered is false it means that the channel was not registered on an eventLoop yet.
             // In this case we add the context to the pipeline and add a task that will call
             // ChannelHandler.handlerAdded(...) once the channel is registered.
-            if (!registered) {
+            if (!registered) { // 当使用ChannelInitializer辅助类添加handler时候 Channel还没注册到复用器上 这时候进行标识等待回调
                 newCtx.setAddPending();
-                callHandlerCallbackLater(newCtx, true);
+                callHandlerCallbackLater(newCtx, true); // newCtx就是对当前handler的封装
                 return this;
             }
 
@@ -226,8 +226,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 return this;
             }
         }
-        // 回调添加事件
-        this.callHandlerAdded0(newCtx);
+        this.callHandlerAdded0(newCtx); // 回调handler的添加事件(内部也会判断执行的时候Channel有没有注册到复用器上 严格保证回调执行时机是在Channel注册复用器之后)
         return this;
     }
 
@@ -615,7 +614,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     private void callHandlerAdded0(final AbstractChannelHandlerContext ctx) {
         try {
-            ctx.callHandlerAdded();
+            ctx.callHandlerAdded(); // NioServerSocketChannel在init初始化时向pipeline中添加ChannelInitializer实例 ctx就是对ChannelInitializer实例的封装
         } catch (Throwable t) {
             boolean removed = false;
             try {
@@ -1120,7 +1119,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         // holding the lock and so produce a deadlock if handlerAdded(...) will try to add another handler from outside
         // the EventLoop.
         PendingHandlerCallback task = pendingHandlerCallbackHead;
-        while (task != null) {
+        while (task != null) { // 轮询单链表
             task.execute();
             task = task.next;
         }
@@ -1130,7 +1129,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         assert !registered;
 
         PendingHandlerCallback task = added ? new PendingHandlerAddedTask(ctx) : new PendingHandlerRemovedTask(ctx);
-        PendingHandlerCallback pending = pendingHandlerCallbackHead;
+        PendingHandlerCallback pending = pendingHandlerCallbackHead; // 将handler封装起来挂到单链表上
         if (pending == null) {
             this.pendingHandlerCallbackHead = task;
         } else {
@@ -1479,6 +1478,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         @Override
         void execute() {
             EventExecutor executor = ctx.executor();
+            // 线程切换 NioEventLoop线程负责执行
             if (executor.inEventLoop()) {
                 callHandlerAdded0(ctx);
             } else {

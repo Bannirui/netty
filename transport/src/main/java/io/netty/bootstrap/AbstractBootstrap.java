@@ -463,6 +463,14 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         return regFuture;
     }
 
+    /**
+     * - NioServerSocketChannel->pipeline中添加个ChannelInitializer
+     *     - 等待NioServerSocketChannel注册复用器后被回调
+     *         - 添加workerHandler
+     *         - 提交异步任务
+     *             - 在pipeline中添加ServerBootstrapAcceptor
+     * - NioSocketChannel->bootStrap指定的workerHandler添加到pipeline中
+     */
     abstract void init(Channel channel) throws Exception;
 
     /**

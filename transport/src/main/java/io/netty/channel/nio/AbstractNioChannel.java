@@ -51,7 +51,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             InternalLoggerFactory.getInstance(AbstractNioChannel.class);
 
     private final SelectableChannel ch;
-    protected final int readInterestOp; // 关注的IO事件
+    protected final int readInterestOp; // 关注的IO事件 NioServerSocketChannel初始化的时候关注的是连接事件(16)
     volatile SelectionKey selectionKey;
     boolean readPending;
     private final Runnable clearReadPendingRunnable = new Runnable() {
@@ -79,7 +79,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
         super(parent);
         this.ch = ch; // jdk的channel 绑定jdk底层的ServerSocketChannel netty的channel跟jdk的channel关系是组合关系 在netty的channel中有个jdk的channel成员变量 这个成员变量定义在AbstractNioChannel中
-        this.readInterestOp = readInterestOp; // Channel关注的IO事件 NioSocketChannel关注OP_READ可读事件 NioServerSocketChannel关注OP_ACCEPT连接事件
+        this.readInterestOp = readInterestOp; // Channel关注的IO事件 NioSocketChannel关注OP_READ可读事件 NioServerSocketChannel关注OP_ACCEPT(16)连接事件
         try {
             ch.configureBlocking(false); // 将jdk的channel设置为非阻塞模式(系统调用fcntl)
         } catch (IOException e) {

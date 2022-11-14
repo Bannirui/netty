@@ -82,7 +82,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
          * {@link io.netty.channel.nio.NioEventLoop}调用的时候会走到其父类的{@link AbstractNioByteChannel#newUnsafe()}方法
          */
         unsafe = this.newUnsafe();
-        pipeline = this.newChannelPipeline(); // 每个channel内部都会创建一个pipeline
+        pipeline = this.newChannelPipeline(); // 每个channel内部都会创建一个pipeline 默认两个节点(head和tail 都不是哑节点 是有实际作用的)
     }
 
     /**
