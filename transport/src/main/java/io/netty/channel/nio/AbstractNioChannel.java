@@ -52,7 +52,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
     private final SelectableChannel ch;
     protected final int readInterestOp; // 关注的IO事件 NioServerSocketChannel初始化的时候关注的是连接事件(16)
-    volatile SelectionKey selectionKey;
+    volatile SelectionKey selectionKey; // 复用器待监听的Channel
     boolean readPending;
     private final Runnable clearReadPendingRunnable = new Runnable() {
         @Override
@@ -378,9 +378,12 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             try {
                 /**
                  * jdk底层的注册方法
-                 * 第一个参数为selector
-                 * 第二个参数表示不关心任何事件
                  * jdk中channel的register方法 将SocketChannel或者ServerSocketChannel注册到selector中 这里监听集合设置为0 也就是什么都不监听->后续有地方会需要修改这个selectionKey的监听集合
+                 *     - 第一个参数为selector 复用器的实现(Java对不同OS系统的封装不同)
+                 *     - 第二个参数表示不关心任何事件 因为Channel注册复用器的操作最前置
+                 *         - NioServerSocketChannel注册完复用器->bind
+                 *         - NioSocketChannel注册完复用器->connect
+                 *     - 第三个参数是为了关联Netty的Channel和Jdk的Channel映射关系 因为真正所谓的注册复用器是在Jdk层面实现的 所以要维护一个关联关系 将来Jdk的Channel发生了事件 接到了复用器的通知 要找到对应的Netty的Channel进行操作
                  */
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
@@ -405,16 +408,15 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     }
 
     @Override
-    protected void doBeginRead() throws Exception { // 让Channel注册到复用器上关注读事件
+    protected void doBeginRead() throws Exception { // NioServerSocketChannel bind之后的active事件触发的读
         // Channel.read() or ChannelHandlerContext.read() was called
-        final SelectionKey selectionKey = this.selectionKey; // 获取到selectionKey
+        final SelectionKey selectionKey = this.selectionKey; // 复用器待监听的Channel NioServerSocketChannel注册复用器时候关注的事件是0 也就是不关注事件 现在已经bind+listen好 需要更新监听状态 关注连接事件了
         if (!selectionKey.isValid())
             return;
 
         readPending = true;
-        // 感兴趣的事件
-        final int interestOps = selectionKey.interestOps();
-        if ((interestOps & readInterestOp) == 0) { // 此前这个Channel已经注册过一次复用器 但是当时可能没有关注读事件 现在判定一下 此前没有关注过读事件 就把读事件关注也加到复用器上
+        final int interestOps = selectionKey.interestOps(); // 之前注册的时候感兴趣的事件 之前关注的事件=0
+        if ((interestOps & readInterestOp) == 0) { // NioServerSocketChannel已经bind+listen好 需要关注可读事件(也就是连接事件) 因此现在更新复用器的register
             selectionKey.interestOps(interestOps | readInterestOp);
         }
     }

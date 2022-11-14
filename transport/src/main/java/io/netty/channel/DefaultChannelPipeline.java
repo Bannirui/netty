@@ -968,11 +968,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     @Override
     public final ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
         /**
-         * bind是交给pipeline来执行的 bind属于Outbound类型的操作 从pipeline的tail开始往前找 tailHandler->workerHandler->headHandler
+         * bind是交给pipeline来执行的 bind属于Outbound类型的操作 从pipeline的tail开始往前找 tailHandler->workerHandler->ServerBootstrapAcceptor->headHandler
          * head和tail的基类是AbstractChannelHandlerContext 具体实现维护在当前类的两个内部类中HeadContext和TailContext
          * {@link HeadContext}
          * {@link TailContext}
-         * 最终bind的操作由headHandler来处理
+         * 最终bind的操作由headHandler来处理 执行了Jdk的Socket的bind和listen操作
          */
         return tail.bind(localAddress, promise);
     }
@@ -1349,7 +1349,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
 
         @Override
-        public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) { // bind最终实现在headHandler
+        public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) { // bind最终实现在headHandler bind=bind+listen
             unsafe.bind(localAddress, promise);
         }
 
@@ -1378,7 +1378,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void read(ChannelHandlerContext ctx) {
-            unsafe.beginRead();
+            unsafe.beginRead(); // NioServerSocketChannel的active触发读发生在head中
         }
 
         @Override
@@ -1414,9 +1414,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
-            ctx.fireChannelActive();
+            ctx.fireChannelActive(); // head->tail head将NioServerSocketChannel的active事件向后传播 让后面关注这个事件的handler继续处理
 
-            readIfIsAutoRead();
+            readIfIsAutoRead(); // 更新复用器register的地方
         }
 
         @Override
@@ -1437,7 +1437,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
 
         private void readIfIsAutoRead() {
-            if (channel.config().isAutoRead()) {
+            if (channel.config().isAutoRead()) { // 默认值就是true
                 channel.read();
             }
         }

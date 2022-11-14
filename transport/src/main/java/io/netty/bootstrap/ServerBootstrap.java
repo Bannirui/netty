@@ -217,8 +217,8 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                 Entry<ChannelOption<?>, Object>[] childOptions,
                 Entry<AttributeKey<?>, Object>[] childAttrs
         ) {
-            this.childGroup = childGroup;
-            this.childHandler = childHandler;
+            this.childGroup = childGroup; // workerGroup
+            this.childHandler = childHandler; // workerHandler
             this.childOptions = childOptions;
             this.childAttrs = childAttrs;
 

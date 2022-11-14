@@ -452,10 +452,10 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     @Override
-    public ChannelFuture bind(final SocketAddress localAddress, final ChannelPromise promise) {
+    public ChannelFuture bind(final SocketAddress localAddress, final ChannelPromise promise) { // 执行Jdk底层Socket逻辑 bind和listen
         ObjectUtil.checkNotNull(localAddress, "localAddress");
         if (isNotValidPromise(promise, false)) return promise;
-        final AbstractChannelHandlerContext next = this.findContextOutbound(MASK_BIND); // 比如此刻pipeline中有3个handler(headHandler->logHandler->tailHandler) bind属于OutBound操作 从tailHandler往前找OutBound类型的handler 先找到了logHandler 但是它没有重写bind方法 而是直接调用模板方法(将任务继续往前传 让OutBound类型handler继续处理) 最终bind的实现在headHandler中
+        final AbstractChannelHandlerContext next = this.findContextOutbound(MASK_BIND); // 比如此刻pipeline中有4个handler(headHandler->logHandler->ServerBootstrapAcceptor->tailHandler) bind属于OutBound操作 从tailHandler往前找OutBound类型的handler 先找到了logHandler 但是它没有重写bind方法 而是直接调用模板方法(将任务继续往前传 让OutBound类型handler继续处理) 最终bind的实现在headHandler中
         EventExecutor executor = next.executor();
         // 保证NioEventLoop处理同一个Channel 如果不是NioEventLoop在执行 就通过向NioEventLoop提交异步任务方式切换线程
         if (executor.inEventLoop())
@@ -635,9 +635,9 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelHandlerContext read() {
-        final AbstractChannelHandlerContext next = findContextOutbound(MASK_READ);
+        final AbstractChannelHandlerContext next = findContextOutbound(MASK_READ); // 从tail->head往前找OutBound类型处理器 找到了head
         EventExecutor executor = next.executor();
-        if (executor.inEventLoop()) {
+        if (executor.inEventLoop()) { // 发生在head中
             next.invokeRead();
         } else {
             Tasks tasks = next.invokeTasks;
@@ -653,7 +653,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeRead() {
         if (invokeHandler()) {
             try {
-                ((ChannelOutboundHandler) handler()).read(this);
+                ((ChannelOutboundHandler) handler()).read(this); // NioServerSocketChannel的active触发读发生在head中
             } catch (Throwable t) {
                 invokeExceptionCaught(t);
             }

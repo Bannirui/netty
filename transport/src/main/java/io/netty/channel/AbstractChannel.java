@@ -583,7 +583,17 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
-                if (isActive()) { // active指channel已经打开
+                /**
+                 * active指channel已经打开
+                 *     - NioServerSocketChannel已经执行过bind操作
+                 *     - NioSocketChannel...
+                 *
+                 * 注册复用器属于前置操作
+                 *     - 先于NioServerSocketChannel的bind(bind+listen)操作
+                 *     - 先于NioSocketChannel的connect操作
+                 * 因此Channel注册完复用器走到这时Channel还没有active
+                 */
+                if (isActive()) {
                     if (firstRegistration) { // 如果该channel是第一次执行register 那么往pipeline中丢一个fireChannelActive事件
                         /**
                          * 发布active事件
@@ -595,7 +605,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                         // again so that we process inbound data.
                         //
                         // See https://github.com/netty/netty/issues/4805
-                        this.beginRead(); // 该channel已经register过了 让该channel立马去监听通道中的OP_READ事件
+                        /**
+                         * 在NioServerSocketChannel注册复用器时关注的事件集合时0 现在复用器已经注册好 pipeline中handler已经准备好 服务端可以接收客户端的连接了 因此需要更新复用器的事件集合 让复用器关注服务端Channel的可读事件
+                         */
+                        this.beginRead();
                     }
                 }
             } catch (Throwable t) {
@@ -622,7 +635,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // broadcast packet on *nix if the socket is bound on non-wildcard address.
             }
 
-            boolean wasActive = isActive(); // Channel执行完bind操作之后 这个标识位是true
+            boolean wasActive = isActive(); // Channel执行完bind操作之后 这个标识位是true 此时还没bind因此它是false
             try {
                 /**
                  * 子类{@link io.netty.channel.socket.nio.NioServerSocketChannel#doBind(SocketAddress)} 调用jdk的channel绑定端口的逻辑
@@ -635,10 +648,20 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             if (!wasActive && isActive()) { // 确保bind操作成功 发布NioServerSocket的active的事件
+                /**
+                 * 异步任务 此时pipeline中的handler有4个
+                 *     - head
+                 *     - workerHandler
+                 *     - ServerBootstrapAcceptor
+                 *     - tail
+                 *
+                 * 从head->tail开始关注NioServerSocketChannel的active事件
+                 * 在head节点中埋点更新了复用器的register
+                 */
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {
-                        pipeline.fireChannelActive();
+                        pipeline.fireChannelActive(); // bind(bind+listen)成功了 截止当前服务端复用器关注的事件集合还是0 不关注事件 这个active事件会触发更新复用器关注NioServerSocketChannel的可读事件
                     }
                 });
             }
@@ -913,7 +936,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         }
 
         @Override
-        public final void beginRead() {
+        public final void beginRead() { // NioServerSocketChannel的active触发的读
             assertEventLoop();
 
             try {

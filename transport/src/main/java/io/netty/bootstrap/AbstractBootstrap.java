@@ -305,7 +305,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
         /**
          * Channel注册复用器是NioEventLoop线程的异步任务
-         * 这里是为了保证注册复用器的操作先于bind
+         * 这里是为了保证注册复用器的操作先于bind和listen
          *     - 复用器注册完触发ChannelInitializer方法回调 向pipeline中添加必要的handler 保证后续发生读写时 Channel都能依赖上完整的handler链
          *     - 前一个复用器注册时异步执行
          *         - 如果已经复用器注册已经完成 pipeline中handler已经初始化好 向NioEventLoop提交任务让它执行bind
@@ -314,7 +314,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
-            doBind0(regFuture, channel, localAddress, promise); // 此时Channel已经跟NioEventLoop线程绑定了 给boss线程添加个任务 让boss线程执行bind操作 这个地方也是真正启动boss线程的时机
+            doBind0(regFuture, channel, localAddress, promise); // 此时Channel已经跟NioEventLoop线程绑定了 给boss线程添加个任务 让boss线程执行bind和listen操作 这个地方也是真正启动boss线程的时机
             return promise;
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
@@ -332,7 +332,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
                         // See https://github.com/netty/netty/issues/2586
                         promise.registered();
 
-                        doBind0(regFuture, channel, localAddress, promise); // NioEventLoop线程执行bind(headHandler处理器真正处理) bind完成后通过向NioEventLoop提交异步任务方式 让NioEventLoop发布一个NioServerSocketChannel的active事件
+                        doBind0(regFuture, channel, localAddress, promise); // NioEventLoop线程执行bind和listen操作(headHandler处理器真正处理) bind完成后通过向NioEventLoop提交异步任务方式 让NioEventLoop发布一个NioServerSocketChannel的active事件
                     }
                 }
             });
@@ -476,15 +476,21 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     abstract void init(Channel channel) throws Exception;
 
     /**
+     * 在服务端执行bind+listen之前 IO线程已经处于启动状态 但是Channel注册复用器的时候关注的事件集合是0 因此在bind之后需要更新复用器的register 关注Channel上的可读事件(这样ServerBootstrapAcceptor才能根据后续的事件建立端到端的连接)
      * Channel中发生的读写数据操作都会按照InBound和OutBound类型交给pipeline 让关注的handler执行
      */
     private static void doBind0(final ChannelFuture regFuture, final Channel channel, final SocketAddress localAddress, final ChannelPromise promise) {
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.
-        // 提交异步任务让NioEventLoop线程执行bind 此时pipeline的handler(head workerHandler tail) bind操作属于OutBound类型 因此从tail往前找handler headHandler负责真正执行bind
+        /**
+         * 提交异步任务让NioEventLoop线程执行bind
+         * 这个地方的bind对应OS的Socket编程中的bind和listen
+         * 此时pipeline的handler(head workerHandler ServerBootstrapAcceptor tail) bind操作属于OutBound类型 因此从tail往前找handler headHandler负责真正执行bind和listen
+         * NioEventLoop执行真正的bind操作 添加监听器处理异步操作结果 NioEventLoop执行bind结束后 它自己知道bind结果 处理ChannelFutureListener.CLOSE_ON_FAILURE的逻辑
+         */
         channel.eventLoop().execute(new Runnable() {
             @Override
-            public void run() { // NioEventLoop执行真正的bind操作 添加监听器处理异步操作结果 NioEventLoop执行bind结束后 它自己知道bind结果 处理ChannelFutureListener.CLOSE_ON_FAILURE的逻辑
+            public void run() {
                 if (regFuture.isSuccess()) channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
                 else promise.setFailure(regFuture.cause());
             }
