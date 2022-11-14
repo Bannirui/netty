@@ -63,7 +63,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     private static final boolean DISABLE_KEY_SET_OPTIMIZATION = SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);
 
     private static final int MIN_PREMATURE_SELECTOR_RETURNS = 3;
-    private static final int SELECTOR_AUTO_REBUILD_THRESHOLD;
+    private static final int SELECTOR_AUTO_REBUILD_THRESHOLD; // 默认值512
 
     private final IntSupplier selectNowSupplier = new IntSupplier() {
         @Override
@@ -226,7 +226,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
         });
 
         /**
-         * 判断拿到的class对象是不是Class对象是不是Selector的实现类
+         * 判断拿到的class对象是不是Selector的实现类
          */
         if (!(maybeSelectorImplClass instanceof Class) || !((Class<?>) maybeSelectorImplClass).isAssignableFrom(unwrappedSelector.getClass()))
             return new SelectorTuple(unwrappedSelector);
@@ -288,7 +288,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
         });
 
         if (maybeException instanceof Exception) {
-            selectedKeys = null;
+            this.selectedKeys = null;
             Exception e = (Exception) maybeException;
             return new SelectorTuple(unwrappedSelector);
         }
@@ -389,6 +389,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
      * around the infamous epoll 100% CPU bug.
      */
     public void rebuildSelector() {
+        // NioEventLoop线程操作 线程切换
         if (!inEventLoop()) {
             execute(new Runnable() {
                 @Override
@@ -427,26 +428,17 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
 
         // Register all channels to the new Selector.
         int nChannels = 0;
-        /**
-         * 拿到旧select中所有的key
-         */
-        for (SelectionKey key: oldSelector.keys()) {
-            Object a = key.attachment();
+        for (SelectionKey key: oldSelector.keys()) { // 注册的事件(EPoll的epoll_ctl系统调用 KQueue的EV_SET宏调用) 让复用器关注Socket的什么事件
+            Object a = key.attachment(); // 通过attachment关联映射这Netty的Channel和Jdk的Channel关系
             try {
                 if (!key.isValid() || key.channel().keyFor(newSelectorTuple.unwrappedSelector) != null)
                     continue;
-                /**
-                 * 获取key注册的事件
-                 */
-                int interestOps = key.interestOps();
-                /**
-                 * 将key注册的事件取消
-                 */
+                int interestOps = key.interestOps(); // 当初注册到复用器上时 要关注Channel的什么事件
                 key.cancel();
                 /**
                  * 注册到重新创建的selector中
                  */
-                SelectionKey newKey = key.channel().register(newSelectorTuple.unwrappedSelector, interestOps, a);
+                SelectionKey newKey = key.channel().register(newSelectorTuple.unwrappedSelector, interestOps, a); // 将Channel重新注册到Selector上
                 /**
                  * 如果channel是NioChannel 就重新赋值
                  */
@@ -464,8 +456,8 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
             }
         }
 
-        selector = newSelectorTuple.selector;
-        unwrappedSelector = newSelectorTuple.unwrappedSelector;
+        this.selector = newSelectorTuple.selector;
+        this.unwrappedSelector = newSelectorTuple.unwrappedSelector;
 
         try {
             // time to close the old selector as everything else is registered to the new one
@@ -592,7 +584,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
             return true;
         }
         if (SELECTOR_AUTO_REBUILD_THRESHOLD > 0 &&
-                selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) {
+                selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) { // 判定发生空轮询
             // The selector returned prematurely many times in a row.
             // Rebuild the selector to work around the problem.
             this.rebuildSelector();
