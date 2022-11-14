@@ -155,6 +155,16 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
         final ChannelFuture regFuture = super.initAndRegister(); // 跟NioServerSocketChanel::bind一样都是在父类中实现
         final Channel channel = regFuture.channel();
 
+        /**
+         * 跟NioServerSocket中的bind(...)流程一样
+         * 都是将Channel注册复用器前置化 有IO线程异步完成
+         *     - Netty Channel的创建 底层映射OS的Socket
+         *     - Channel中pipeline初始化
+         *     - Netty Channel中持有Jdk的Channel 将Jdk的Channel注册到IO多路复用器上 关注的事件集合为0(不关注事件 因为此时Channel还没打开)
+         *     - 注册复用器后执行一些回调 完善pipeline中handler链
+         *     - Jdk Channel的connect
+         *     - connect之后发布active事件 更新注册复用器关注的事件
+         */
         if (regFuture.isDone()) {
             if (!regFuture.isSuccess()) {
                 return regFuture;
@@ -177,7 +187,7 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
                         // Registration was successful, so set the correct executor to use.
                         // See https://github.com/netty/netty/issues/2586
                         promise.registered();
-                        doResolveAndConnect0(channel, remoteAddress, localAddress, promise);
+                        doResolveAndConnect0(channel, remoteAddress, localAddress, promise); // 等着promise的回调
                     }
                 }
             });
@@ -214,7 +224,7 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
                     promise.setFailure(resolveFailureCause);
                 } else {
                     // Succeeded to resolve immediately; cached? (or did a blocking lookup)
-                    doConnect(resolveFuture.getNow(), localAddress, promise);
+                    doConnect(resolveFuture.getNow(), localAddress, promise); // promise等着回调
                 }
                 return promise;
             }
@@ -242,12 +252,12 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.
         final Channel channel = connectPromise.channel();
-        // 向NioEventLoop线程提交了个异步任务
+        // 确保IO线程的执行权利 提交异步任务
         channel.eventLoop().execute(new Runnable() {
             @Override
             public void run() {
                 if (localAddress == null) {
-                    channel.connect(remoteAddress, connectPromise);
+                    channel.connect(remoteAddress, connectPromise); // promise等着回调
                 } else {
                     channel.connect(remoteAddress, localAddress, connectPromise);
                 }

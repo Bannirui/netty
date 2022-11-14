@@ -243,16 +243,30 @@ public abstract class AbstractNioChannel extends AbstractChannel {
                     throw new ConnectionPendingException();
                 }
 
-                boolean wasActive = isActive();
+                boolean wasActive = isActive(); // 在系统调用connect执行成功前标识还是false
+                /**
+                 * 当前是基于Nio非阻塞模型 所以调用Socket的connect操作是非阻塞的 不管是否connect成功 都会立即返回
+                 * - 如果立即连接服务器就成功了 客户端的连接工作就结束了
+                 *     - 向pipeline发布传递一个active事件
+                 * - 如果暂时还没连接成功 就需要客户端阻塞在复用器上关注着连接事件到来
+                 *     - 此前复用器上的事件集合是0 所以如果连接失败 需要关注连接事件8
+                 *     - 但是不能无限阻塞着 所以一般客户端都会设置连接超时时间
+                 *
+                 * 所以什么时候客户端连接服务端成功了 什么时候就向pipeline发布传播一个active事件
+                 * 这个时机只有两个
+                 *     - 立即连接成功 下面这个方法fulfillConnectPromise(...)直接发布事件
+                 *     - 超时内连接成功 复用器select(...)出来了就绪IO
+                 */
                 if (doConnect(remoteAddress, localAddress)) {
-                    fulfillConnectPromise(promise, wasActive);
-                } else {
+                    fulfillConnectPromise(promise, wasActive); // 连接成功 在NioSocketChannel的pipeline传播active事件
+                } else { // 根据配置的超时检查一次
                     connectPromise = promise;
                     requestedRemoteAddress = remoteAddress;
 
                     // Schedule connect timeout.
                     int connectTimeoutMillis = config().getConnectTimeoutMillis();
                     if (connectTimeoutMillis > 0) {
+                        // 向IO线程提交一个超时检测器 这个超时检测器就是为了控制客户端连接超时
                         connectTimeoutFuture = eventLoop().schedule(new Runnable() {
                             @Override
                             public void run() {
@@ -301,7 +315,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             // Regardless if the connection attempt was cancelled, channelActive() event should be triggered,
             // because what happened is what happened.
             if (!wasActive && active) {
-                pipeline().fireChannelActive();
+                pipeline().fireChannelActive(); // 向NioSocketChannel的pipeline发布一个active事件 head->tail 现在pipeline中有3个handler head-bizHandler-tail 最终实现在head中
             }
 
             // If a user cancelled the connection attempt, close the channel, which is followed by channelInactive().
@@ -322,7 +336,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         }
 
         @Override
-        public final void finishConnect() {
+        public final void finishConnect() { // 客户端连接服务端成功后 向NioSocketChannel的pipeline发布传播一个active事件
             // Note this method is invoked by the event loop only if the connection attempt was
             // neither cancelled nor timed out.
 
@@ -407,10 +421,23 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         eventLoop().cancel(selectionKey());
     }
 
+    /**
+     * NioServerSocketChannel和NioSocketChannel active之后触发的读
+     *     - NioServerSocketChannel bind之后
+     *     - NioSocketChannel connect之后
+     *
+     * 复用器待监听的Channel
+     *     - NioServerSocketChannel注册复用器时候关注的事件是0 也就是不关注事件 现在已经bind+listen好 需要更新监听状态 关注连接事件了 对于服务端而言 客户端向其连接/读 服务端视角看到的都是收到了可读事件
+     *     - NioSocketChannel
+     *         - 注册的时候关注的是0 立即连接服务器成功 现在需要关注可读事件
+     *         - 注册的时候关注的是0 连接操作的时候没有立即成功 而是在超时内成功的 中间复用器关注的类型就增加过连接状态(8) 连接成功之后 又将连接状态从复用器事件集合中移除了 最终还是变成了0
+     *
+     * 现在Channel都要增加对可读(16)的关注
+     */
     @Override
-    protected void doBeginRead() throws Exception { // NioServerSocketChannel bind之后的active事件触发的读
+    protected void doBeginRead() throws Exception {
         // Channel.read() or ChannelHandlerContext.read() was called
-        final SelectionKey selectionKey = this.selectionKey; // 复用器待监听的Channel NioServerSocketChannel注册复用器时候关注的事件是0 也就是不关注事件 现在已经bind+listen好 需要更新监听状态 关注连接事件了
+        final SelectionKey selectionKey = this.selectionKey;
         if (!selectionKey.isValid())
             return;
 

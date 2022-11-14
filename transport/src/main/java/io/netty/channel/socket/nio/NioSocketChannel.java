@@ -315,6 +315,10 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         }
     }
 
+    /**
+     * 发起connect
+     * 此时注册在复用器上的事件类型还是0 connect失败了把事件类型更新为8(连接事件j)
+     */
     @Override
     protected boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddress) throws Exception {
         if (localAddress != null) {
@@ -323,7 +327,12 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
 
         boolean success = false;
         try {
-            boolean connected = SocketUtils.connect(javaChannel(), remoteAddress);
+            boolean connected = SocketUtils.connect(javaChannel(), remoteAddress); // 基于非阻塞的网络模型 当前这边连接服务器 可能成功也可能需要等一会才能成功 都会立即返回
+            /**
+             * - 如果立即连接服务器就成功了 客户端的连接工作就结束了
+             * - 如果暂时还没连接成功 就需要客户端阻塞在复用器上关注着连接事件到来
+             *     - 但是不能无限阻塞着 所以一般客户端都会设置连接超时时间
+             */
             if (!connected) {
                 selectionKey().interestOps(SelectionKey.OP_CONNECT);
             }

@@ -732,15 +732,15 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
          * 执行到这 说明当前的Jdk的Channel是合法的
          */
         try {
-            int readyOps = k.readyOps(); // Jdk的Channel发生的事件
-            if ((readyOps & SelectionKey.OP_CONNECT) != 0) { // Jdk的Channel发生了连接事件
+            int readyOps = k.readyOps(); // Jdk的Channel发生的事件类型
+            if ((readyOps & SelectionKey.OP_CONNECT) != 0) { // Jdk的Channel发生了连接事件(8) 客户端向服务端发起connect操作 是个非阻塞操作 可能没有立即连接成功 在超时时间内连接成功了 因此在发起连接后要关注客户上的连接事件
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
                 int ops = k.interestOps();
                 ops &= ~SelectionKey.OP_CONNECT;
-                k.interestOps(ops);
+                k.interestOps(ops); // 连接建立之后 客户端向服务端关注的事件将是读写 所以不必继续关注连接
 
-                unsafe.finishConnect();
+                unsafe.finishConnect(); // 客户端连接成功后 向NioSocketChannel的pipeline发布传播active事件
             }
             // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
             if ((readyOps & SelectionKey.OP_WRITE) != 0) { // Jdk的Channel发生了写事件

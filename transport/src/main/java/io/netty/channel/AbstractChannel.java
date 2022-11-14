@@ -275,7 +275,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     @Override
     public ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) {
-        return pipeline.connect(remoteAddress, promise);
+        return pipeline.connect(remoteAddress, promise); // NioSocketChannel的pipeline中现在只有3个handler(head bizHandler tail) connect属于Outbound类型事件 从tail->head传播 最终实现在head中
     }
 
     @Override
@@ -300,7 +300,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     @Override
     public Channel read() {
-        pipeline.read();
+        pipeline.read(); // tail->head方向找Outbound类型处理器 最终实现在head中
         return this;
     }
 
@@ -936,7 +936,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         }
 
         @Override
-        public final void beginRead() { // NioServerSocketChannel的active触发的读
+        public final void beginRead() { // NioServerSocketChannel和NioSocketChannel的active触发的读
             assertEventLoop();
 
             try {

@@ -888,7 +888,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     @Override
-    public final ChannelPipeline fireChannelActive() {
+    public final ChannelPipeline fireChannelActive() { // NioSocketChannel连接成功之后 pipeline中有head-bizHandler-tail 从head->tail向pipeline传播一个active事件 最终实现在head中
         AbstractChannelHandlerContext.invokeChannelActive(head);
         return this;
     }
@@ -978,8 +978,8 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     @Override
-    public final ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) {
-        return tail.connect(remoteAddress, promise); // connect是交给pipeline来执行的 connect属于Outbound类型的操作 从pipeline的tail开始 register操作数据Inbound类型操作 从head开始
+    public final ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) { // promise等着回调
+        return tail.connect(remoteAddress, promise); // connect是交给pipeline来执行的 connect属于Outbound类型的操作 从pipeline的tail开始 此时NioSocketChannel的pipeline中有head bizHandler tail
     }
 
     @Override
@@ -1005,7 +1005,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline read() {
-        tail.read();
+        tail.read(); // tail->head找Outbound类型处理器 最终实现在head中
         return this;
     }
 
@@ -1378,7 +1378,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void read(ChannelHandlerContext ctx) {
-            unsafe.beginRead(); // NioServerSocketChannel的active触发读发生在head中
+            unsafe.beginRead(); // NioServerSocketChannel和NioSocketChannel的active触发读发生在head中
         }
 
         @Override
@@ -1412,9 +1412,23 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             }
         }
 
+        /**
+         * Channel打开后 沿着head->tail的方向在pipeline中传播active事件 让后面关注这个事件的handler继续处理
+         * - NioServerSocketChannel 执行bind+listen成功后发布active事件
+         *     - 在NioServerSocketChannel打开之前 复用器关注的事件集合是0
+         *     - 现在已经打开 需要关注连接事件(16)
+         * - NioSocketChannel 执行connect成功后发布active事件
+         *     - 在NioSocketChannel连接成功之前
+         *         - 可能关注的事件集合一直都是0 发起连接connect立即成功
+         *         - 可能罐组合的事件集合0->8为了在连接超时内让复用器关注连接事件 然后连接成功之后有将8移除恢复原状
+         *     - 现在已经连接上服务端 不需要再继续关注连接类型事件(8) 将连接类型从事件集合中移除
+         *
+         * 现在不管是NioServerSocketChannel还是NioSocketChannel都是处于active状态
+         * 需要更新复用器事件集合
+         */
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
-            ctx.fireChannelActive(); // head->tail head将NioServerSocketChannel的active事件向后传播 让后面关注这个事件的handler继续处理
+            ctx.fireChannelActive();
 
             readIfIsAutoRead(); // 更新复用器register的地方
         }

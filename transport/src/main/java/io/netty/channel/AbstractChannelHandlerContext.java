@@ -194,6 +194,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     static void invokeChannelActive(final AbstractChannelHandlerContext next) {
         EventExecutor executor = next.executor();
+        // 线程切换 保证NioEventLoop的线程执行权
         if (executor.inEventLoop()) {
             next.invokeChannelActive();
         } else {
@@ -485,7 +486,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) {
-        return this.connect(remoteAddress, null, promise);
+        return this.connect(remoteAddress, null, promise); // connect的最终实现在head中 promise等着回调
     }
 
     @Override
@@ -497,8 +498,9 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             return promise;
         }
 
-        final AbstractChannelHandlerContext next = findContextOutbound(MASK_CONNECT); // 在客户端初始化时 pipeline中只有3个handler(head bizHandler tail) 现在找到了head(HeadContext)
+        final AbstractChannelHandlerContext next = findContextOutbound(MASK_CONNECT); // 在客户端初始化时 pipeline中只有3个handler(head bizHandler tail) connect是Outbound类型事件 从tail->head找Outbound类型的handler 最终实现在head中
         EventExecutor executor = next.executor();
+        // connect这一动作也是由NioEventLoop负责
         if (executor.inEventLoop()) {
             next.invokeConnect(remoteAddress, localAddress, promise);
         } else {
@@ -515,7 +517,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeConnect(SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) {
         if (invokeHandler()) {
             try {
-                ((ChannelOutboundHandler) handler()).connect(this, remoteAddress, localAddress, promise); // (ChannelOutboundHandler) handler()返回的就是pipeline双链表中的Outbound类型的handler节点
+                ((ChannelOutboundHandler) handler()).connect(this, remoteAddress, localAddress, promise); // connect的实现在head中
             } catch (Throwable t) {
                 notifyOutboundHandlerException(t, promise);
             }
@@ -635,7 +637,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelHandlerContext read() {
-        final AbstractChannelHandlerContext next = findContextOutbound(MASK_READ); // 从tail->head往前找OutBound类型处理器 找到了head
+        final AbstractChannelHandlerContext next = findContextOutbound(MASK_READ); // 从tail->head往前找OutBound类型处理器 找到了head 最终实现在head中
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) { // 发生在head中
             next.invokeRead();
@@ -653,7 +655,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeRead() {
         if (invokeHandler()) {
             try {
-                ((ChannelOutboundHandler) handler()).read(this); // NioServerSocketChannel的active触发读发生在head中
+                ((ChannelOutboundHandler) handler()).read(this); // NioServerSocketChannel和NioSocketChannel的active触发读发生在head中
             } catch (Throwable t) {
                 invokeExceptionCaught(t);
             }
