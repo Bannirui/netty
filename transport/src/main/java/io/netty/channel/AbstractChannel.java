@@ -532,7 +532,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         }
 
         /**
-         * - NioEventLoop线程执行 Jdk的Channel注册到复用器上
+         * - NioEventLoop线程执行 Jdk的Channel注册到复用器上 不关注事件(关注的事件是0 因为对于NIO而言 注册复用器是最前置的动作 后续的连接和可读对于ServerSocket而言都是收到了可读事件 所以按照职责分工 让ServerBootstrapAcceptor去更要关注的事件)
          * - 发布事件
          *     - 发布handlerAdd事件 触发ChannelInitializer方法执行
          *     - 发布register事件
@@ -545,7 +545,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 boolean firstRegistration = neverRegistered;
                 /**
                  * 实际的注册
-                 * jdk底层操作 将channel注册到selector复用器上
+                 * jdk底层操作 将channel注册到selector复用器上 不关注Channel发生的事件类型
+                 * 注册复用器的时候监听集合是空的(也就是让复用器对Jdk的Channel感兴趣的事件是0)
                  */
                 AbstractChannel.this.doRegister();
                 neverRegistered = false;

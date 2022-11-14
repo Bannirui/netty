@@ -419,6 +419,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
          * 对于ServerBootstrap而言是bossGroup线程组
          * 对于Bootstrap而言只有一个group线程组
          *
+         * --- 分割线 ---
+         *
          * 线程组的register(...)方法就是从group中轮询出来一个NioEventLoop线程执行register(...)方法 Channel跟NioEventLoop关联起来并注册到NioEventLoop的Selector上
          *     - 注册复用器结束后 NioEventLoop线程发布一些事件让关注的handler执行
          *         - handlersAdd(...)事件 触发
