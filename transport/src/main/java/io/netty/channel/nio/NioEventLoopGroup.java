@@ -189,7 +189,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
                 selectorProvider,
                 selectStrategyFactory.newSelectStrategy(), // taskQueue任务队列中有任务就poll一个任务出来执行 空的就阻塞等待任务到来
                 rejectedExecutionHandler, // taskQueue任务队列满了拒绝策略(向上抛异常)
-                taskQueueFactory, // 常规任务队列
+                taskQueueFactory, // 非IO任务队列
                 tailTaskQueueFactory // 收尾任务队列
         ); // NioEventLoop就是NioEventLoopGroup这个线程池中的个体 相当于线程池中的线程 在每个NioEventLoop实例内部都持有一个自己Thread实例
     }

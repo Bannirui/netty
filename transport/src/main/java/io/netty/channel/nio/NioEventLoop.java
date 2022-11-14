@@ -148,13 +148,13 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                  SelectorProvider selectorProvider, // Java中IO多路复用器提供器
                  SelectStrategy strategy, // 正常任务队列选择策略
                  RejectedExecutionHandler rejectedExecutionHandler, // 正常任务队列拒绝策略
-                 EventLoopTaskQueueFactory taskQueueFactory, // 正常任务
+                 EventLoopTaskQueueFactory taskQueueFactory, // 非IO任务
                  EventLoopTaskQueueFactory tailTaskQueueFactory // 收尾任务
     ) {
         super(parent,
                 executor,
                 false,
-                newTaskQueue(taskQueueFactory), // 正常任务队列
+                newTaskQueue(taskQueueFactory), // 非IO任务队列
                 newTaskQueue(tailTaskQueueFactory), // 收尾任务队列
                 rejectedExecutionHandler
         ); // 调用父类构造方法
