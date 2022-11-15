@@ -47,19 +47,19 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             StacklessCancellationException.newInstance(DefaultPromise.class, "cancel(...)"));
     private static final StackTraceElement[] CANCELLATION_STACK = CANCELLATION_CAUSE_HOLDER.cause.getStackTrace();
 
-    private volatile Object result; // 保存执行结果
-    private final EventExecutor executor; // 执行任务的线程池
+    private volatile Object result; // 异步任务执行结果
+    private final EventExecutor executor; // 线程执行器
     /**
      * One or more listeners. Can be a {@link GenericFutureListener} or a {@link DefaultFutureListeners}.
      * If {@code null}, it means either 1) no listeners were added yet or 2) all listeners were notified.
      *
      * Threading - synchronized(this). We must support adding listeners when there is no EventExecutor.
      */
-    private Object listeners; // 监听者 回调函数 任务执行结束后执行(任务执行正常或者异常结束后都回调)
+    private Object listeners; // 监听器(提交异步任务的线程设置的) 回调函数 任务执行结束后异步线程负责回调(任务执行正常或者异常结束后都回调)
     /**
      * Threading - synchronized(this). We are required to hold the monitor to use Java's underlying wait()/notifyAll().
      */
-    private short waiters; // 等待这个promise的线程数(调用sync()和await()进行等待的线程数量)
+    private short waiters; // 阻塞等待异步任务结果的线程数量(调用sync()和await()进行等待的线程)
 
     /**
      * Threading - synchronized(this). We must prevent concurrent notification and FIFO listener notification if the
@@ -91,9 +91,15 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         executor = null;
     }
 
+    /**
+     * 将异步结果设置到DefaultPromise的result阈上
+     * 后置动作
+     *     - 唤醒所有阻塞在等待异步结果上的线程
+     *     - 执行监听器的回调
+     */
     @Override
     public Promise<V> setSuccess(V result) {
-        if (setSuccess0(result)) {
+        if (this.setSuccess0(result)) {
             return this;
         }
         throw new IllegalStateException("complete already: " + this);
@@ -177,7 +183,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         checkNotNull(listener, "listener");
 
         synchronized (this) {
-            addListener0(listener);
+            this.addListener0(listener); // 提交异步任务的线程同时设置了监听器 等异步任务执行线程执行结束了 回调监听器
         }
 
         if (isDone()) {
@@ -236,7 +242,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     @Override
     public Promise<V> await() throws InterruptedException {
-        if (isDone()) {
+        if (this.isDone()) { // 异步任务已经执行结束了 直接返回
             return this;
         }
 
@@ -244,15 +250,15 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             throw new InterruptedException(toString());
         }
 
-        checkDeadLock();
+        checkDeadLock(); // 避免EventLoop线程自锁
 
-        synchronized (this) {
+        synchronized (this) { // 多线程获取同一个异步任务的执行结果
             while (!isDone()) {
-                incWaiters();
+                incWaiters(); // 阻塞获取异步任务的线程计数
                 try {
-                    wait();
+                    wait(); // 阻塞住线程等待被notify唤醒 获取异步结果的线程释放了管程锁 进入了当前promise的阻塞列表 现在是wait阻塞的 那么将来一定是异步线程调用了notify或者notifyAll来唤醒阻塞线程的
                 } finally {
-                    decWaiters();
+                    decWaiters(); // 阻塞在promise上的线程会唤醒 说明异步结果已经被异步线程放回了promise 更新阻塞获取异步结果的线程数量
                 }
             }
         }
@@ -333,9 +339,9 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     @Override
     public V get() throws InterruptedException, ExecutionException {
         Object result = this.result;
-        if (!isDone0(result)) {
-            await();
-            result = this.result;
+        if (!isDone0(result)) { // 异步任务执行完了就直接返回
+            this.await(); // 异步任务还没执行完 取结果的线程需要阻塞等待异步结果的到来
+            result = this.result; // 阻塞等待异步结果的线程被唤醒了 说明异步线程已经将执行结果放到了result阈上
         }
         if (result == SUCCESS || result == UNCANCELLABLE) {
             return null;
@@ -396,7 +402,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     @Override
     public boolean isDone() {
-        return isDone0(result);
+        return isDone0(this.result); // 异步任务执行有结果了
     }
 
     @Override
@@ -456,9 +462,9 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         return executor;
     }
 
-    protected void checkDeadLock() {
-        EventExecutor e = executor();
-        if (e != null && e.inEventLoop()) {
+    protected void checkDeadLock() { // 避免EventLoop线程自锁
+        EventExecutor e = this.executor(); // 线程执行器 Netty中的任务都是交由NioEventLoop或者EventLoop线程处理的 如果当前获取异步结果的线程就是EventLoop线程 然后还被阻塞了 那么它就不能工作了 所以要避免这种情况
+        if (e != null && e.inEventLoop()) { //
             throw new BlockingOperationException(toString());
         }
     }
@@ -482,6 +488,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     private void notifyListeners() {
         EventExecutor executor = executor();
+        // 线程切换 确保回调监听器的线程就是执行异步任务的线程
         if (executor.inEventLoop()) {
             final InternalThreadLocalMap threadLocals = InternalThreadLocalMap.get();
             final int stackDepth = threadLocals.futureListenerStackDepth();
@@ -545,7 +552,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             listeners = this.listeners;
             this.listeners = null;
         }
-        for (;;) {
+        for (;;) { // 回调监听器
             if (listeners instanceof DefaultFutureListeners) {
                 notifyListeners0((DefaultFutureListeners) listeners);
             } else {
@@ -575,7 +582,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     @SuppressWarnings({ "unchecked", "rawtypes" })
     private static void notifyListener0(Future future, GenericFutureListener l) {
         try {
-            l.operationComplete(future);
+            l.operationComplete(future); // 回调执行监听器的operationComplete方法 这个方法是放置监听器的线程自定义的
         } catch (Throwable t) {
             if (logger.isWarnEnabled()) {
                 logger.warn("An exception was thrown by " + l.getClass().getName() + ".operationComplete()", t);
@@ -584,8 +591,8 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     }
 
     private void addListener0(GenericFutureListener<? extends Future<? super V>> listener) {
-        if (listeners == null) {
-            listeners = listener;
+        if (this.listeners == null) {
+            this.listeners = listener;
         } else if (listeners instanceof DefaultFutureListeners) {
             ((DefaultFutureListeners) listeners).add(listener);
         } else {
@@ -601,19 +608,31 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         }
     }
 
+    /**
+     * 将异步结果设置到DefaultPromise的result阈上
+     * 后置动作
+     *     - 唤醒所有阻塞在等待异步结果上的线程
+     *     - 执行监听器的回调
+     */
     private boolean setSuccess0(V result) {
-        return setValue0(result == null ? SUCCESS : result);
+        return this.setValue0(result == null ? SUCCESS : result); // CAS方式将异步任务结果设置到result阈上
     }
 
     private boolean setFailure0(Throwable cause) {
         return setValue0(new CauseHolder(checkNotNull(cause, "cause")));
     }
 
+    /**
+     * 将异步结果设置到DefaultPromise的result阈上
+     * 后置动作
+     *     - 唤醒所有阻塞在等待异步结果上的线程
+     *     - 执行监听器的回调
+     */
     private boolean setValue0(Object objResult) { // 设置好值然后执行监听者的回调方法
         if (RESULT_UPDATER.compareAndSet(this, null, objResult) ||
-            RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) {
-            if (checkNotifyWaiters()) {
-                this.notifyListeners(); // 执行监听者的回调方法
+            RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) { // CAS将异步结果设置到result阈上
+            if (checkNotifyWaiters()) { // 唤醒所有阻塞等待异步结果的线程
+                this.notifyListeners(); // 如果还有监听器 执行监听器的回调
             }
             return true;
         }
@@ -625,8 +644,8 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
      * @return {@code true} if there are any listeners attached to the promise, {@code false} otherwise.
      */
     private synchronized boolean checkNotifyWaiters() {
-        if (waiters > 0) {
-            notifyAll();
+        if (waiters > 0) { // 阻塞等待异步结果的线程数量
+            notifyAll(); // 唤醒所有阻塞等待异步结果的线程
         }
         return listeners != null;
     }
@@ -643,7 +662,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     }
 
     private void rethrowIfFailed() {
-        Throwable cause = cause();
+        Throwable cause = this.cause(); // 执行异常
         if (cause == null) {
             return;
         }
@@ -825,6 +844,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         return result instanceof CauseHolder && ((CauseHolder) result).cause instanceof CancellationException;
     }
 
+    // 异步任务有执行结果了
     private static boolean isDone0(Object result) {
         return result != null && result != UNCANCELLABLE;
     }

@@ -102,8 +102,14 @@ class PromiseTask<V> extends DefaultPromise<V> implements RunnableFuture<V> {
     @Override
     public void run() {
         try {
-            if (setUncancellableInternal()) {
-                V result = runTask();
+            if (setUncancellableInternal()) { // 设置任务不可取消
+                V result = runTask(); // 任务执行结果
+                /**
+                 * 将异步结果设置到DefaultPromise的result阈上
+                 * 后置动作
+                 *     - 唤醒所有阻塞在等待异步结果上的线程
+                 *     - 执行监听器的回调
+                 */
                 setSuccessInternal(result);
             }
         } catch (Throwable e) {
@@ -148,6 +154,12 @@ class PromiseTask<V> extends DefaultPromise<V> implements RunnableFuture<V> {
     }
 
     protected final Promise<V> setSuccessInternal(V result) {
+        /**
+         * 将异步结果设置到DefaultPromise的result阈上
+         * 后置动作
+         *     - 唤醒所有阻塞在等待异步结果上的线程
+         *     - 执行监听器的回调
+         */
         super.setSuccess(result);
         clearTaskAfterCompletion(true, COMPLETED);
         return this;

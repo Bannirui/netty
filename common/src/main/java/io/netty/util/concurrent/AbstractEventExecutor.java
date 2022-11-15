@@ -132,7 +132,7 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
 
     @Override
     protected final <T> RunnableFuture<T> newTaskFor(Callable<T> callable) {
-        return new PromiseTask<T>(this, callable);
+        return new PromiseTask<T>(this, callable); // 提交给EventLoop线程的任务被封装称PromiseTask实现
     }
 
     @Override
