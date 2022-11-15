@@ -61,8 +61,8 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private static final AtomicReferenceFieldUpdater<DefaultChannelPipeline, MessageSizeEstimator.Handle> ESTIMATOR =
             AtomicReferenceFieldUpdater.newUpdater(
                     DefaultChannelPipeline.class, MessageSizeEstimator.Handle.class, "estimatorHandle");
-    final AbstractChannelHandlerContext head;
-    final AbstractChannelHandlerContext tail;
+    final AbstractChannelHandlerContext head; // 双链表头节点(非哑节点)
+    final AbstractChannelHandlerContext tail; // 双链表尾节点(非哑节点)
 
     private final Channel channel;
     private final ChannelFuture succeededFuture;
@@ -89,6 +89,15 @@ public class DefaultChannelPipeline implements ChannelPipeline {
      */
     private boolean registered; // 标识Channel已经注册到了IO多路复用器上
 
+    /**
+     * 每个Channel(NioServerSocketChannel和NioSocketChannel)都持有一个pipeline
+     * pipeline就是HandlerContext的容器(HandlerContext就是handler的封装)
+     *
+     * 所有的IO读写底层都是通过unsafe实例 然后一层层委托
+     * unsafe读写->Channel->pipeline->向handler发布传播
+     *     - InBound事件 head->tail方向
+     *     - OutBound事件 tail->head方向
+     */
     protected DefaultChannelPipeline(Channel channel) {
         this.channel = ObjectUtil.checkNotNull(channel, "channel");
         succeededFuture = new SucceededChannelFuture(channel, null);
@@ -911,6 +920,13 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return this;
     }
 
+    /**
+     * - pipeline#fireChannelRead() 从head节点发布ChannelRead事件
+     *
+     * - head中定义在channelRead(...)方法中的逻辑肯定会被回调
+     *     - 执行逻辑
+     *     - ctx#fireChannelRead()从head->tail方向找距离当前最近的下一个处理器传播事件
+     */
     @Override
     public final ChannelPipeline fireChannelRead(Object msg) {
         AbstractChannelHandlerContext.invokeChannelRead(head, msg);
@@ -1003,9 +1019,16 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return tail.deregister(promise);
     }
 
+    /**
+     * read属于出站事件
+     * pipeline发布read事件 从tail开始 顺着tail->head方向传播
+     *     - tail节点是Inbound类型处理器 自己不处理
+     *     - tail顺着tail->head方向往前找前驱节点 找到离自己最近的 对read事件感兴趣的处理器节点
+     *     - 然后周而复始
+     */
     @Override
     public final ChannelPipeline read() {
-        tail.read(); // tail->head找Outbound类型处理器 最终实现在head中
+        tail.read();
         return this;
     }
 
@@ -1327,7 +1350,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         private final Unsafe unsafe;
 
-        HeadContext(DefaultChannelPipeline pipeline) {
+        HeadContext(DefaultChannelPipeline pipeline) { // 入站 出站
             super(pipeline, null, HEAD_NAME, HeadContext.class);
             unsafe = pipeline.channel().unsafe();
             setAddComplete();
@@ -1442,7 +1465,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
 
         @Override
-        public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        public void channelRead(ChannelHandlerContext ctx, Object msg) { // head节点并没有对ChannelRead做处理 将ChannelRead事件继续顺着head->tail的方向传播
             ctx.fireChannelRead(msg);
         }
 

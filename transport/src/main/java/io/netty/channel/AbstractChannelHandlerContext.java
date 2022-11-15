@@ -64,7 +64,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private final DefaultChannelPipeline pipeline;
     private final String name;
     private final boolean ordered;
-    private final int executionMask;
+    private final int executionMask; // 标识该handler感兴趣的事件集合 将来事件在pipeline中传播的时候 每个handler看看自己的感兴趣事件集合是不是包含传播的事件就行
 
     // Will be set to null if no child executor should be used, otherwise it will be set to the
     // child executor.
@@ -84,7 +84,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         this.pipeline = pipeline;
         // 线程处理器
         this.executor = executor;
-        // 事件标识
+        // 事件标识 标识该handler感兴趣的事件集合
         this.executionMask = mask(handlerClass);
         // Its ordered if its driven by the EventLoop or the given Executor is an instanceof OrderedEventExecutor.
         ordered = executor == null || executor instanceof OrderedEventExecutor;
@@ -324,17 +324,15 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     @Override
-    public ChannelHandlerContext fireChannelRead(final Object msg) {
+    public ChannelHandlerContext fireChannelRead(final Object msg) { // ChannelRead属于入站事件 顺着head->tail方向 找到当前处理器下一个入站处理器
         this.invokeChannelRead(this.findContextInbound(MASK_CHANNEL_READ), msg);
         return this;
     }
 
-    static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
+    static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) { // ChannelRead属于入站事件 pipeline发布事件从head开始传播
         final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
-        /**
-         * 第一次执行next 其实就是head节点
-         */
         EventExecutor executor = next.executor();
+        // 线程切换 确保IO线程的永远执行权
         if (executor.inEventLoop())
             next.invokeChannelRead(m);
         else {
@@ -639,7 +637,8 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     public ChannelHandlerContext read() {
         final AbstractChannelHandlerContext next = findContextOutbound(MASK_READ); // 从tail->head往前找OutBound类型处理器 找到了head 最终实现在head中
         EventExecutor executor = next.executor();
-        if (executor.inEventLoop()) { // 发生在head中
+        // 线程切换 保证IO线程对任务的执行权
+        if (executor.inEventLoop()) {
             next.invokeRead();
         } else {
             Tasks tasks = next.invokeTasks;
@@ -858,7 +857,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         return false;
     }
 
-    private AbstractChannelHandlerContext findContextInbound(int mask) {
+    private AbstractChannelHandlerContext findContextInbound(int mask) { // mask标识事件类型 进站事件类型 在pipeline中以当前处理器为起点 顺着head->tail方向找离自己最近的后继节点 对mask事件感兴趣的handler
         AbstractChannelHandlerContext ctx = this;
         EventExecutor currentExecutor = executor();
         do {
@@ -867,7 +866,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         return ctx;
     }
 
-    private AbstractChannelHandlerContext findContextOutbound(int mask) {
+    private AbstractChannelHandlerContext findContextOutbound(int mask) { // mask标识事件类型 出站类型事件 在pipeline中以当前处理器为起点 顺着tail->head方向找离自己最近的前驱节点 对mask事件感兴趣的handler
         AbstractChannelHandlerContext ctx = this;
         EventExecutor currentExecutor = executor();
         do {
@@ -876,8 +875,19 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         return ctx;
     }
 
+    /**
+     * 待考察的处理器
+     *     - Inbound事件 传播方向就是head->tail 那么这个待考察的处理器就是当前处理器的后继节点
+     *     - Outbound事件 传播防线就是tail->head 那么这个待考察的处理器就是当前处理器的前驱节点
+     *
+     * 处理器的感兴趣事件集合不包含传播的事件类型就忽略它
+     */
     private static boolean skipContext(
-            AbstractChannelHandlerContext ctx, EventExecutor currentExecutor, int mask, int onlyMask) {
+            AbstractChannelHandlerContext ctx, // 待考察的处理器
+            EventExecutor currentExecutor, // 当前处理器作为起点
+            int mask, // 传播的事件类型
+            int onlyMask // 入站事件集合或者出站事件集合
+    ) {
         // Ensure we correctly handle MASK_EXCEPTION_CAUGHT which is not included in the MASK_EXCEPTION_CAUGHT
         return (ctx.executionMask & (onlyMask | mask)) == 0 ||
                 // We can only skip if the EventExecutor is the same as otherwise we need to ensure we offload

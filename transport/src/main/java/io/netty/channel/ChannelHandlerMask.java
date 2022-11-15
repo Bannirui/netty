@@ -36,23 +36,23 @@ final class ChannelHandlerMask {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(ChannelHandlerMask.class);
 
     // Using to mask which methods must be called for a ChannelHandler.
-    static final int MASK_EXCEPTION_CAUGHT = 1;
-    static final int MASK_CHANNEL_REGISTERED = 1 << 1;
-    static final int MASK_CHANNEL_UNREGISTERED = 1 << 2;
-    static final int MASK_CHANNEL_ACTIVE = 1 << 3;
-    static final int MASK_CHANNEL_INACTIVE = 1 << 4;
-    static final int MASK_CHANNEL_READ = 1 << 5;
-    static final int MASK_CHANNEL_READ_COMPLETE = 1 << 6;
-    static final int MASK_USER_EVENT_TRIGGERED = 1 << 7;
-    static final int MASK_CHANNEL_WRITABILITY_CHANGED = 1 << 8;
-    static final int MASK_BIND = 1 << 9;
-    static final int MASK_CONNECT = 1 << 10;
-    static final int MASK_DISCONNECT = 1 << 11;
-    static final int MASK_CLOSE = 1 << 12;
-    static final int MASK_DEREGISTER = 1 << 13;
-    static final int MASK_READ = 1 << 14;
-    static final int MASK_WRITE = 1 << 15;
-    static final int MASK_FLUSH = 1 << 16;
+    static final int MASK_EXCEPTION_CAUGHT = 1; // 入站 出站 都要关注
+    static final int MASK_CHANNEL_REGISTERED = 1 << 1; // 入站
+    static final int MASK_CHANNEL_UNREGISTERED = 1 << 2; // 入站
+    static final int MASK_CHANNEL_ACTIVE = 1 << 3; // 入站
+    static final int MASK_CHANNEL_INACTIVE = 1 << 4; // 入站
+    static final int MASK_CHANNEL_READ = 1 << 5; // 入站
+    static final int MASK_CHANNEL_READ_COMPLETE = 1 << 6; // 入站
+    static final int MASK_USER_EVENT_TRIGGERED = 1 << 7; // 入站
+    static final int MASK_CHANNEL_WRITABILITY_CHANGED = 1 << 8; // 入站
+    static final int MASK_BIND = 1 << 9; // 出站
+    static final int MASK_CONNECT = 1 << 10; // 出站
+    static final int MASK_DISCONNECT = 1 << 11; // 出站
+    static final int MASK_CLOSE = 1 << 12; // 出站
+    static final int MASK_DEREGISTER = 1 << 13; // 出站
+    static final int MASK_READ = 1 << 14; // 出站
+    static final int MASK_WRITE = 1 << 15; // 出站
+    static final int MASK_FLUSH = 1 << 16; // 出站
 
     static final int MASK_ONLY_INBOUND =  MASK_CHANNEL_REGISTERED |
             MASK_CHANNEL_UNREGISTERED | MASK_CHANNEL_ACTIVE | MASK_CHANNEL_INACTIVE | MASK_CHANNEL_READ |

@@ -298,9 +298,16 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         return pipeline.deregister(promise);
     }
 
+    /**
+     * read属于出站事件
+     * pipeline发布read事件 从tail开始 顺着tail->head方向传播
+     *     - tail节点是Inbound类型处理器 自己不处理
+     *     - tail顺着tail->head方向往前找前驱节点 找到离自己最近的 对read事件感兴趣的处理器节点
+     *     - 然后周而复始
+     */
     @Override
     public Channel read() {
-        pipeline.read(); // tail->head方向找Outbound类型处理器 最终实现在head中
+        pipeline.read();
         return this;
     }
 
