@@ -733,7 +733,11 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
          */
         try {
             int readyOps = k.readyOps(); // Jdk的Channel发生的事件类型
-            if ((readyOps & SelectionKey.OP_CONNECT) != 0) { // Jdk的Channel发生了连接事件(8) 客户端向服务端发起connect操作 是个非阻塞操作 可能没有立即连接成功 在超时时间内连接成功了 因此在发起连接后要关注客户上的连接事件
+            /**
+             * NioSocketChannel发生了Connect连接事件(8)
+             *     - 客户端向服务端发起connect操作 是个非阻塞操作 可能没有立即连接成功 在超时时间内连接成功了 因此在客户端发起连接后要关注NioSocketChannel的连接事件
+             */
+            if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
                 int ops = k.interestOps();
@@ -755,6 +759,15 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
              * 无论处理op_read事件还是op_accept事件 都走的unsafe的read()方法 这里unsafe是通过channel获取到的
              * 如果处理的是accept事件 这里的channel是NioServerSocketChannel 与之绑定的是{@link io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe#unsafe}
              * 如果处理的是op_read事件 处理的线程是worker线程 这里的channel是{@link io.netty.channel.socket.nio.NioServerSocketChannel} 与之绑定的unsafe对象是{@link io.netty.channel.nio.AbstractNioByteChannel.NioByteUnsafe} 会进入{@link AbstractNioByteChannel.NioByteUnsafe#read()}方法
+             *
+             * NioServerSocketChannel的注册复用器和bind+listen完成后 关注的事件类型是Accept接收连接类型(16)
+             *     - 此时客户端向服务端发起Connect连接请求 NioServerSocketChannel会收到就绪事件类型16
+             *         - boss线程读取客户端的连接信息
+             *         - NioServerSocketChannel读取连接实现在NioMessageUnsafe中
+             *         - NioMessageUnsafe负责接收NioSocketChannel连接
+             *         - 调用Jdk底层的accept接收客户端连接
+             *         - 将accept结果封装成NioSocketChannel向pipeline传播(pipeline中有 head-bossHandler-ServerBootstrapAcceptor-tail)
+             *         - 触发ServerBootstrapAcceptor回调
              */
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop

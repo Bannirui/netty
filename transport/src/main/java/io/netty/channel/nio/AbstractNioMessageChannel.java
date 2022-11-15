@@ -61,17 +61,28 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
          */
         private final List<Object> readBuf = new ArrayList<Object>();
 
+        /**
+         *     - 此时客户端向服务端发起Connect连接请求 NioServerSocketChannel会收到就绪事件类型16的Accept
+         *         - NioServerSocketChannel读取连接实现在NioMessageUnsafe中
+         *         - NioMessageUnsafe负责接收NioSocketChannel连接
+         *         - 调用Jdk底层的accept接收客户端连接
+         *         - 将accept结果封装成NioSocketChannel向pipeline传播(pipeline中有 head-bossHandler-ServerBootstrapAcceptor-tail)
+         *         - 触发ServerBootstrapAcceptor回调
+         */
         @Override
         public void read() {
-            // 必须是NioEventLoop方法调用的 不能通过外部线程调用
-            assert eventLoop().inEventLoop();
-            // 服务端channel的config
+            assert eventLoop().inEventLoop(); // IO操作(Channel上的读写)只能由注册的复用器所在的线程 也就是绑定的唯一的NioEventLoop线程执行
+            /**
+             * 给Channel的配置参数 最终体现在OS的Socket上
+             *     - 通过ServerBootstrap#config传递的NioServerSocketChannel的配置信息
+             */
             final ChannelConfig config = config();
-            // 服务端channel的pipeline
+            /**
+             * 每个Channel中都维护了一个pipeline
+             *     - NioServerSocket收到客户端连接 触发自己的Accept接收连接状态 读取连接信息
+             */
             final ChannelPipeline pipeline = pipeline();
-            // 处理服务端接入的速率
-            final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
-            // 设置配置
+            final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle(); // 接收对端数据时 ByteBuf的分配策略(基于历史数据动态调整大小 避免太大发生空间浪费 避免太小造成频繁扩容)
             allocHandle.reset(config);
 
             boolean closed = false;
@@ -80,7 +91,11 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 try {
                     do {
                         /**
-                         * 创建jdk底层的channel readBuf用于临时承载读到的连接
+                         * NioServerSocketChannel接收客户端NioSocketChannel连接
+                         *     - Jdk底层系统调用accept
+                         *     - 将服务端fork出来的Socket封装成Jdk的SocketChannel
+                         *     - Netty将Jdk的SocketChannel封装成NioSocketChannel
+                         *     - 将NioServerSocketChannel和accept结果NioSocketChannel一起封装到ByteBuf中
                          */
                         int localRead = AbstractNioMessageChannel.this.doReadMessages(readBuf);
                         if (localRead == 0) break;
@@ -88,19 +103,23 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                             closed = true;
                             break;
                         }
-                        // 分配器将读到的连接进行计数
-                        allocHandle.incMessagesRead(localRead);
+                        allocHandle.incMessagesRead(localRead); // 读到的连接数计数
                     } while (continueReading(allocHandle)); // 连接数是否超过最大值
                 } catch (Throwable t) {
                     exception = t;
                 }
                 // 遍历每一条客户端连接
                 int size = readBuf.size();
-                for (int i = 0; i < size; i ++) {
+                for (int i = 0; i < size; i++) {
                     readPending = false;
                     /**
-                     * 传递事件 将创建NioSocketChannel进行传递
-                     * 最终调用ServerBootstrap的内部类的方法{@link io.netty.bootstrap.ServerBootstrap.ServerBootstrapAcceptor#channelRead(ChannelHandlerContext, Object)}
+                     * 向NioServerSocketChannel的pipeline传播ChannelRead事件
+                     * 此时pipeline中3个handler
+                     *     - head
+                     *     - ServerBootstrapAcceptor
+                     *     - tail
+                     * ServerBootstrap将回调方法处理服务端收到的客户端连接
+                     * 对于ServerBootstrap的回调方法而言 收到的参数就是这儿的readBuf.get(...)内容 也就是每一条连接信息(ServerSocket, accept后fork出来的Socket)
                      */
                     pipeline.fireChannelRead(readBuf.get(i));
                 }

@@ -15,19 +15,7 @@
  */
 package io.netty.bootstrap;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelConfig;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.ServerChannel;
-import io.netty.channel.nio.AbstractNioMessageChannel;
+import io.netty.channel.*;
 import io.netty.util.AttributeKey;
 import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.logging.InternalLogger;
@@ -235,21 +223,31 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             };
         }
 
+        /**
+         * NioServerSocketChannel等待客户端连接时 关注这Accept事件(16)
+         * 此时pipeline上有4个handler
+         *     - head
+         *     - bossHandler(比如LoggingHandler)
+         *     - ServerBootstrapAcceptor
+         *     - tail
+         * NioMessageUnsafe中读取了所有连进服务端的客户端连接 向pipeline发布了ChannelRead事件
+         * 触发了该方法的回调
+         *     - msg就是每一条客户端连接信息的封装
+         *         - NioServerSocketChannel
+         *         - NioSocketChannel(对accept结果的封装)
+         */
         @Override
         @SuppressWarnings("unchecked")
-        public void channelRead(ChannelHandlerContext ctx, Object msg) { // 服务端收到连接或者收到消息 对于服务端视角而言 都是收到了可读事件
-            /**
-             * msg参数就是在{@link AbstractNioMessageChannel#read()}方法中调用{@code pipeline.fireChannelRead(readBuf.get(i))}方法的入参NioSocketChannel
-             */
-            final Channel child = (Channel) msg;
-
-            child.pipeline().addLast(this.childHandler);
-
+        public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            final Channel child = (Channel) msg; // msg就是客户端的一条连接信息 实现类型是NioSocketChannel 要注册到workerGroup中的workerChannel
+            child.pipeline().addLast(this.childHandler); // 向workerChannel中添加ServerBootstrap初始化时指定的workerHandler
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
 
             try {
-                this.childGroup.register(child) // 在workerGroup线程组中轮询出一个NioEventLoop线程跟child这个Channel绑定
+                // workerChannel注册到workerGroup中
+                this.childGroup
+                        .register(child)
                         .addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {

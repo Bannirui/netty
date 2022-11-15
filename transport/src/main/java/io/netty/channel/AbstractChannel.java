@@ -50,7 +50,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     private final Channel parent;
     private final ChannelId id;
     private final Unsafe unsafe;
-    private final DefaultChannelPipeline pipeline;
+    private final DefaultChannelPipeline pipeline; // 每个Channel中维护一个pipeline
     private final VoidChannelPromise unsafeVoidPromise = new VoidChannelPromise(this, false);
     private final CloseFuture closeFuture = new CloseFuture(this);
 
@@ -535,7 +535,22 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
          * - NioEventLoop线程执行 Jdk的Channel注册到复用器上 不关注事件(关注的事件是0 因为对于NIO而言 注册复用器是最前置的动作 后续的连接和可读对于ServerSocket而言都是收到了可读事件 所以按照职责分工 让ServerBootstrapAcceptor去更要关注的事件)
          * - 发布事件
          *     - 发布handlerAdd事件 触发ChannelInitializer方法执行
-         *     - 发布register事件
+         *     - 发布ChannelRegister事件
+         *     - 根据Channel状态判定事件(服务端bind或者客户端connect的Channel现在都还没有处于active打开状态)
+         *         - 服务端Accept出来的NioSocketChannel 初始状态就已经是active打开状态
+         *             - 首次注册到workerGroup的时候发布ChannelActive事件
+         *
+         * 注册IO多路复用器属于最前置操作
+         * 注册复用器发生的时机
+         *     - 服务端NioServerSocketChannel
+         *         - bind(bind+listen)之前复用器关注事件集合为0
+         *         - bind(bind+listen)之后发布ChannelActive事件增加复用器事件对可读(16)的关注
+         *     - 客户端NioSocketChannel
+         *         - connect之前复用器关注事件集合为0
+         *         - connect之后发布ChannelActive事件增加复用器事件对可读(16)的关注
+         *     - 服务端Accept出来的NioSocketChannel
+         *         - 属于特殊条件下的Channel 注册复用器之后立即发布ChannelActive事件 增加复用器对可读事件(16)的关注
+         *
          */
         private void register0(ChannelPromise promise) {
             try {
@@ -592,22 +607,17 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                  *     - 先于NioServerSocketChannel的bind(bind+listen)操作
                  *     - 先于NioSocketChannel的connect操作
                  * 因此Channel注册完复用器走到这时Channel还没有active
+                 *
+                 * 但是如果是NioServerSocketChannel通过accept生成了一个NioSocketChannel在workerGroup中发生了注册复用器时 这时候
                  */
                 if (isActive()) {
-                    if (firstRegistration) { // 如果该channel是第一次执行register 那么往pipeline中丢一个fireChannelActive事件
-                        /**
-                         * 发布active事件
-                         * 让pipeline中handler关注invokeChannelActive(...)的handler执行
-                         */
-                        pipeline.fireChannelActive();
+                    if (firstRegistration) {
+                        pipeline.fireChannelActive(); // 服务端accept出来的NioSocketChannel注册到workerGroup中后发布ChannelActive事件 触发HeadHandler将复用器关注的事件增加对可读的关注 0->16
                     } else if (config().isAutoRead()) {
                         // This channel was registered before and autoRead() is set. This means we need to begin read
                         // again so that we process inbound data.
                         //
                         // See https://github.com/netty/netty/issues/4805
-                        /**
-                         * 在NioServerSocketChannel注册复用器时关注的事件集合时0 现在复用器已经注册好 pipeline中handler已经准备好 服务端可以接收客户端的连接了 因此需要更新复用器的事件集合 让复用器关注服务端Channel的可读事件
-                         */
                         this.beginRead();
                     }
                 }

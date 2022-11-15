@@ -1422,6 +1422,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
          *         - 可能关注的事件集合一直都是0 发起连接connect立即成功
          *         - 可能罐组合的事件集合0->8为了在连接超时内让复用器关注连接事件 然后连接成功之后有将8移除恢复原状
          *     - 现在已经连接上服务端 不需要再继续关注连接类型事件(8) 将连接类型从事件集合中移除
+         * - NioSocketChannel是NioServerSocketChannel的accept结果
+         *     - 在注册完复用器之后 根据条件状态判定(Channel已经处于active状态 却是第一次注册复用器) 发布ChannelActive事件
+         *     - 默认注册复用器时候关注的事件集合是0 现在开始加上对可读事件的关注
          *
          * 现在不管是NioServerSocketChannel还是NioSocketChannel都是处于active状态
          * 需要更新复用器事件集合

@@ -81,6 +81,15 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
         return (EventLoop) super.next();
     }
 
+    /**
+     * 将Netty中Channel注册到IO多路复用器上
+     *     - Netty的Channel对应的JdkChannel注册到IO多路复用器上
+     *     - 注册复用器是前置动作 刚开始注册时关注事件集合是0(不关注事件)
+     *     - 注册注册成功后发布事件
+     *         - HandlerAdded
+     *         - ChannelRegister
+     *         - ...
+     */
     @Override
     public ChannelFuture register(Channel channel) {
         return this.register(new DefaultChannelPromise(channel, this)); // 实例化一个Promise 将当前channel带进到promise中去
@@ -94,6 +103,14 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
      *     <ul><pre>{@code unsafe()}</pre>返回的是初始化channel实例的时候给每个channel分配的{@link io.netty.channel.Channel.Unsafe}实例 对象类型是{@link io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe} 发生在{@link AbstractChannel#AbstractChannel(Channel)}</ul>
      *     <ul><pre>{@code register()}</pre>执行的是{@link io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe}的register(...)方法 实现是在其父类中{@link io.netty.channel.AbstractChannel.AbstractUnsafe#register(EventLoop, ChannelPromise)}</ul>
      * </p>
+     *
+     * 将Netty中Channel注册到IO多路复用器上
+     *     - Netty的Channel对应的JdkChannel注册到IO多路复用器上
+     *     - 注册复用器是前置动作 刚开始注册时关注事件集合是0(不关注事件)
+     *     - 注册注册成功后发布事件
+     *         - HandlerAdded
+     *         - ChannelRegister
+     *         - ...
      */
     @Override
     public ChannelFuture register(final ChannelPromise promise) {
