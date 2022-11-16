@@ -41,7 +41,7 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(InternalThreadLocalMap.class);
     private static final ThreadLocal<InternalThreadLocalMap> slowThreadLocalMap =
-            new ThreadLocal<InternalThreadLocalMap>();
+            new ThreadLocal<InternalThreadLocalMap>(); // Jdk线程Thread的数据存储策略
     private static final AtomicInteger nextIndex = new AtomicInteger();
 
     private static final int DEFAULT_ARRAY_LIST_INITIAL_CAPACITY = 8;
@@ -50,10 +50,10 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
     private static final int HANDLER_SHARABLE_CACHE_INITIAL_CAPACITY = 4;
     private static final int INDEXED_VARIABLE_TABLE_INITIAL_SIZE = 32;
 
-    public static final Object UNSET = new Object();
+    public static final Object UNSET = new Object(); // 标识无效值 indexedVariables初始化的时候全部用这个填充
 
     /** Used by {@link FastThreadLocal} */
-    private Object[] indexedVariables;
+    private Object[] indexedVariables; // 数组存储数据 初始化的时候长度32 全部用UNSET来填充
 
     // Core thread-locals
     private int futureListenerStackDepth;
@@ -94,11 +94,11 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
         return slowThreadLocalMap.get();
     }
 
-    public static InternalThreadLocalMap get() {
-        Thread thread = Thread.currentThread();
-        if (thread instanceof FastThreadLocalThread) {
+    public static InternalThreadLocalMap get() { // 懒加载 InternalThreadLocalMap使用数组存储元素 初始化默认长度32 全部用UNSET标识占位 脚标从1开始可用
+        Thread thread = Thread.currentThread(); // Netty封装了FastThreadLocalThread 根据线程类型区分数据存储策略
+        if (thread instanceof FastThreadLocalThread) { // 配套Netty封装的FastThreadLocalThread使用
             return fastGet((FastThreadLocalThread) thread);
-        } else {
+        } else { // 配套Jdk的Thread使用
             return slowGet();
         }
     }
@@ -106,7 +106,7 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
     private static InternalThreadLocalMap fastGet(FastThreadLocalThread thread) {
         InternalThreadLocalMap threadLocalMap = thread.threadLocalMap();
         if (threadLocalMap == null) {
-            thread.setThreadLocalMap(threadLocalMap = new InternalThreadLocalMap());
+            thread.setThreadLocalMap(threadLocalMap = new InternalThreadLocalMap()); // 实例化InternalThreadLocalMap存储数据 默认长度32 全部用UNSET填充
         }
         return threadLocalMap;
     }
@@ -147,12 +147,12 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
     }
 
     private InternalThreadLocalMap() {
-        indexedVariables = newIndexedVariableTable();
+        this.indexedVariables = newIndexedVariableTable(); // 初始化数组 默认容量32
     }
 
     private static Object[] newIndexedVariableTable() {
-        Object[] array = new Object[INDEXED_VARIABLE_TABLE_INITIAL_SIZE];
-        Arrays.fill(array, UNSET);
+        Object[] array = new Object[INDEXED_VARIABLE_TABLE_INITIAL_SIZE]; // 数组初始化 默认容量32
+        Arrays.fill(array, UNSET); // 全部用UNSET标识填充
         return array;
     }
 
@@ -308,7 +308,7 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
         this.localChannelReaderStackDepth = localChannelReaderStackDepth;
     }
 
-    public Object indexedVariable(int index) {
+    public Object indexedVariable(int index) { // 根据数组脚标寻址
         Object[] lookup = indexedVariables;
         return index < lookup.length? lookup[index] : UNSET;
     }
@@ -317,13 +317,13 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
      * @return {@code true} if and only if a new thread-local variable has been created
      */
     public boolean setIndexedVariable(int index, Object value) {
-        Object[] lookup = indexedVariables;
+        Object[] lookup = this.indexedVariables;
         if (index < lookup.length) {
             Object oldValue = lookup[index];
             lookup[index] = value;
             return oldValue == UNSET;
         } else {
-            expandIndexedVariableTableAndSet(index, value);
+            expandIndexedVariableTableAndSet(index, value); // 扩容
             return true;
         }
     }

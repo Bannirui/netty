@@ -25,7 +25,7 @@ public class FastThreadLocalThread extends Thread {
     // This will be set to true if we have a chance to wrap the Runnable.
     private final boolean cleanupFastThreadLocals;
 
-    private InternalThreadLocalMap threadLocalMap;
+    private InternalThreadLocalMap threadLocalMap; // Netty优化了存储结构
 
     public FastThreadLocalThread() {
         cleanupFastThreadLocals = false;
@@ -71,7 +71,7 @@ public class FastThreadLocalThread extends Thread {
      * Note that this method is for internal use only, and thus is subject to change at any time.
      */
     public final InternalThreadLocalMap threadLocalMap() {
-        return threadLocalMap;
+        return this.threadLocalMap;
     }
 
     /**

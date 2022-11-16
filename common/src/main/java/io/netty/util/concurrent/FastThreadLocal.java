@@ -122,10 +122,10 @@ public class FastThreadLocal<V> {
         variablesToRemove.remove(variable);
     }
 
-    private final int index;
+    private final int index; // 指向InternalThreadLocalMap中数组下一个可用脚标
 
     public FastThreadLocal() {
-        index = InternalThreadLocalMap.nextVariableIndex();
+        this.index = InternalThreadLocalMap.nextVariableIndex(); // index初始化时为默认值0 把0处的slot预留出来 从1开始可用 此时InternalThreadLocalMap里面的数组并没有实例化
     }
 
     /**
@@ -133,12 +133,14 @@ public class FastThreadLocal<V> {
      */
     @SuppressWarnings("unchecked")
     public final V get() {
-        InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get();
-        Object v = threadLocalMap.indexedVariable(index);
+        InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get(); // Netty自己封装的数据结构 不是直接用的Jdk原生的threadLocals指向的ThreadLocalMap 懒加载触发InternalThreadLocalMap中的数组初始化
+        Object v = threadLocalMap.indexedVariable(this.index);
         if (v != InternalThreadLocalMap.UNSET) {
             return (V) v;
         }
-
+        /**
+         * 首次调用get没有数据的回调initialValue方法
+         */
         return initialize(threadLocalMap);
     }
 
@@ -174,12 +176,12 @@ public class FastThreadLocal<V> {
     private V initialize(InternalThreadLocalMap threadLocalMap) {
         V v = null;
         try {
-            v = initialValue();
+            v = initialValue(); // 回调initialValue方法
         } catch (Exception e) {
             PlatformDependent.throwException(e);
         }
 
-        threadLocalMap.setIndexedVariable(index, v);
+        threadLocalMap.setIndexedVariable(index, v); // 首次get无值时将initialValue方法的值放到数组
         addToVariablesToRemove(threadLocalMap, this);
         return v;
     }
@@ -188,8 +190,8 @@ public class FastThreadLocal<V> {
      * Set the value for the current thread.
      */
     public final void set(V value) {
-        if (value != InternalThreadLocalMap.UNSET) {
-            InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get();
+        if (value != InternalThreadLocalMap.UNSET) { // 有效值
+            InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get(); // 数据结构
             setKnownNotUnset(threadLocalMap, value);
         } else {
             remove();
@@ -211,7 +213,7 @@ public class FastThreadLocal<V> {
      * @see InternalThreadLocalMap#setIndexedVariable(int, Object).
      */
     private void setKnownNotUnset(InternalThreadLocalMap threadLocalMap, V value) {
-        if (threadLocalMap.setIndexedVariable(index, value)) {
+        if (threadLocalMap.setIndexedVariable(index, value)) { // 向数组中放元素 脚标后移 容量不够触发数组扩容
             addToVariablesToRemove(threadLocalMap, this);
         }
     }
