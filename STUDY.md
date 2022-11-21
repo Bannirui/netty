@@ -1,5 +1,24 @@
 # study
 
+## 笔记
+
+- [Netty源码-00-启动](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-00-%E5%90%AF%E5%8A%A8.md)
+- [Netty源码-01-NioEventLoopGroup](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-01-NioEventLoopGroup.md)
+- [Netty源码-02-FastThreadLocalThread](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-02-FastThreadLocalThread.md)
+- [Netty源码-03-NioEventLoop](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-03-NioEventLoop.md)
+- [Netty源码-04-Selector](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-04-Selector%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E5%99%A8%E4%BC%98%E5%8C%96.md)
+- [Netty源码-05-EventLoop](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-05-EventLoop.md)
+- [Netty源码-06-MpscQueue](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-06-MpscQueue%E5%AE%9E%E7%8E%B0.md)
+- [Netty源码-07-Channel](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-07-Channel.md)
+- [Netty源码-08-ChannelInitializer](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-08-ChannelInitializer.md)
+- [Netty源码-09-ServerBootstrapAcceptor](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-09-ServerBootstrapAcceptor.md)
+- [Netty源码-10-ChannelFuture](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-10-ChannelFuture.md)
+- [Netty源码-11-Pipeline](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-11-Pipeline.md)
+- [Netty源码-12-bind流程](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-12-bind%E6%B5%81%E7%A8%8B.md)
+- [Netty源码-13-connect流程](https://github.com/Bannirui/blogs/blob/master/netty/Netty%E6%BA%90%E7%A0%81-13-connect%E6%B5%81%E7%A8%8B.md)
+
+## 学习目标
+
 ### 服务端启动
 
 * [X]  服务端初始化
