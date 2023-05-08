@@ -22,10 +22,28 @@ package io.netty.util.concurrent;
  * way to access methods.
  *
  */
+
+/**
+ * EventExecutor继承自EventExecutorGroup
+ * EventExecutor是一种特殊的EventExecutorGroup
+ *   - EventExecutorGroup是多个线程的执行器
+ *   - EventExecutor是1个线程的执行器
+ * 因此 在EventExecutorGroup基础上做定制化扩展
+ *   - 约束next()方法的返回为自身实例
+ *   - 为什么要inEventLoop() 我理解为2件事情做铺垫
+ *     - 作为执行器EventExecutor是不独立工作的 它将来一定是工作于EventExecutorGroup之中 而EventExecutorGroup对外开放了任务\事件的提交
+ *       - 任务提交线程只关注提交
+ *       - EventExecutor就是工作线程 它关注执行
+ *       - 因此提供inEventLoop()判定 用来转移代码的执行权 实现异步编程
+ *     - 在上面的基础之上 当所有事情都是通过异步方式提交到了工作线程上 那么站在工作线程视角上 这些任务就天然有序 可以保证一些资源或者前置动作的成功
+ */
 public interface EventExecutor extends EventExecutorGroup {
 
     /**
      * Returns a reference to itself.
+     * EventExecutor是一种特殊的EventExecutorGroup
+     * 单个线程执行器的EventExecutorGroup
+     * 因此EventExecutor的派生实现中next()方法返回实例自身
      */
     @Override
     EventExecutor next();

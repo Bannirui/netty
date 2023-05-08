@@ -27,6 +27,33 @@ import java.util.concurrent.TimeUnit;
  * life-cycle and allows shutting them down in a global fashion.
  *
  */
+
+/**
+ * 从类图的全局关系上很明显的看出这个类是Netty和Java体系的分水岭
+ *   - 首先 命名上体现出Event 对于事件我的理解是
+ *     - 广义上 一个程序的所有输入都可以看作为事件 程序本体固化为事件驱动系统
+ *     - 狭义上 在为Netty的NioEventLoop具体实现做原型设计 事件就是Socket的IO读写
+ *   - 软件设计风格和特性区别 在EventExecutorGroup之上全是Java体系的设计 在此之后都是Netty体系的设计
+ *   - 为什么EventExecutorGroup是顶层 即为啥它是EventExecutor的基类
+ *     - 姑且将EventExecutor称为事件执行器 EventExecutorGroup称为事件执行器管理器
+ *     - 管理器的语义 它由N个执行器组成
+ *       - 管理器不仅对外负责事件任务
+ *       - 对内还要负责执行器管理编排
+ *     - 作者的设计是事件执行器是一种特殊的事件执行器管理器
+ *       - EventExecutor继承自EventExecutorGroup
+ *       - EventExecutorGroup是多个线程的执行器
+ *       - EventExecutor是1个线程的执行器
+ *       - EventExecutor接口的实现要关注的next()方法只能返回自身实例
+ *     - 如果是我来设计 很可能就是EventExecutorGroup和EventExecutor不存在继承关系 在派生类中通过组合方式定义二者关系
+ *   - EventExecutorGroup还继承了Iterable 这个区别于Java对Executor设计的
+ *     - 我对Executor的理解就是在解耦任务提交-执行基础之上 完全闭合Executor的实现 也就是不对外开放内部细节
+ *     - EventExecutorGroup这是对客户端开放了内部的EventExecutor
+ *       - 这样设计肯定是有场景必须要访问到内部的工作线程 也就是EventExecutor
+ *       - Netty要将Selector跟EventExecutor线程绑定 再将Channel注册到Selector上
+ *  - 扩展了ExecutorService中的任务执行器关闭定义
+ *    - 增加了多种API 更加细粒度地控制了关闭行为 这点由使用场景决定
+ *    - 关闭的API的返回值支持了Future 这点是Netty的特点 提供了异步编程的支持 将来客户端可以异步监听关闭而不用傻傻地同步等待
+ */
 public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<EventExecutor> {
 
     /**
