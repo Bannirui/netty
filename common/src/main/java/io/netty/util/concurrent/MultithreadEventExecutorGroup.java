@@ -32,6 +32,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
 
     /**
      * NioEventLoopGroup中维护的NioEventLoop集合 一个group里面有哪些EventLoop
+     * NioEventLoop的基类是EventExecutor
      */
     private final EventExecutor[] children;
     private final Set<EventExecutor> readonlyChildren;
@@ -86,16 +87,21 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             executor = new ThreadPerTaskExecutor(this.newDefaultThreadFactory()); // 构造一个executor线程执行器 一个任务对应一个线程(线程:任务=1:n)
 
         /**
-         * 构建NioEventLoop
+         * 构建NioEventLoop数组
          * NioEventLoop children数组 线程池中的线程数组
          */
         this.children = new EventExecutor[nThreads];
 
-        for (int i = 0; i < nThreads; i ++) { // 根据NioEventLoopGroup构造器指定的数量创建NioEventLoop 也就是指定数量的线程数(线程的创建动作延迟到任务提交时)
+        /**
+         * 轮询NioEventLoop数组 让NioEventLoopGroup组件去创建NioEventLoop实例
+         * 根据NioEventLoopGroup构造器指定的数量创建NioEventLoop 也就是指定数量的线程数(线程的创建动作延迟到任务提交时)
+         */
+        for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
                 /**
                  * 初始化NioEventLoop事件循环器集合 也就是多个线程
+                 * 让NioEventLoopGroup组件去创建NioEventLoop实例
                  */
                 children[i] = this.newChild(executor, args); // args=[SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]
                 success = true;
@@ -173,6 +179,11 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      * Create a new EventExecutor which will later then accessible via the {@link #next()}  method. This method will be
      * called for each thread that will serve this {@link MultithreadEventExecutorGroup}.
      *
+     */
+    /**
+     * 设计模式: 模板方法
+     * 让子类去关注方法的实现细节
+     * 创建EventExecutor实例->让NioEventLoopGroup组件去实现NioEventLoop的创建
      */
     protected abstract EventExecutor newChild(Executor executor, Object... args) throws Exception;
 

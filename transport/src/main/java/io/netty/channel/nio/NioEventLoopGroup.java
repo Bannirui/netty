@@ -173,6 +173,13 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
         }
     }
 
+    /**
+     * NioEventLoopGroup实例创建的时候通过构造方法调用链
+     *   - NioEventLoopGroup->MutithreadEventLoopGroup->MultithreadEventExecutorGroup
+     *   - 在MultithreadEventExecutorGroup定义了一个抽象方法
+     *   - 延迟到当前类进行实现
+     * 关注的内容就是创建NioEventLoop实例
+     */
     @Override
     protected EventLoop newChild(Executor executor, Object... args) throws Exception { // executor=ThreadPerTaskExecutor实例 args=[SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]
         SelectorProvider selectorProvider = (SelectorProvider) args[0]; // Java中对IO多路复用器的实现 依赖Jdk的版本 Window=WindowsSelectorProvider MacOSX=KQueueSelectorProvider Linux=EPollSelectorProvider
