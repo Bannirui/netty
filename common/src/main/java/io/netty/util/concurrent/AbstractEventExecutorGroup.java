@@ -32,7 +32,7 @@ import static io.netty.util.concurrent.AbstractEventExecutor.*;
 public abstract class AbstractEventExecutorGroup implements EventExecutorGroup {
     @Override
     public Future<?> submit(Runnable task) {
-        return next().submit(task);
+        return this.next().submit(task);
     }
 
     @Override
@@ -47,7 +47,7 @@ public abstract class AbstractEventExecutorGroup implements EventExecutorGroup {
 
     @Override
     public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
-        return next().schedule(command, delay, unit);
+        return this.next().schedule(command, delay, unit);
     }
 
     @Override
@@ -57,12 +57,12 @@ public abstract class AbstractEventExecutorGroup implements EventExecutorGroup {
 
     @Override
     public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
-        return next().scheduleAtFixedRate(command, initialDelay, period, unit);
+        return this.next().scheduleAtFixedRate(command, initialDelay, period, unit);
     }
 
     @Override
     public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
-        return next().scheduleWithFixedDelay(command, initialDelay, delay, unit);
+        return this.next().scheduleWithFixedDelay(command, initialDelay, delay, unit);
     }
 
     @Override
@@ -112,6 +112,9 @@ public abstract class AbstractEventExecutorGroup implements EventExecutorGroup {
 
     @Override
     public void execute(Runnable command) {
+        /**
+         * next()方法会将NioEventLoopGroup的children数组中的一个NioEventLoop实例返回给客户端
+         */
         this.next().execute(command);
     }
 }
