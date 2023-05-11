@@ -75,8 +75,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                     SingleThreadEventExecutor.class, ThreadProperties.class, "threadProperties");
 
     /**
-     * 非IO任务队列
-     * 1 通过EventLoopGroup或者EventLoop提供的API提交的任务(execute/submit...)
+     * 非IO任务队列(普通任务和定时任务)
+     * 1 通过EventLoopGroup或者EventLoop提供的API提交的任务(execute/submit/schedule...)
      * 2 从定时任务队列中找到的符合运行时机的定时任务
      * 3 WAKEUP_TASK
      *
@@ -86,6 +86,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      */
     private final Queue<Runnable> taskQueue;
 
+    /**
+     * NioEventLoop的父类一定有一个会持有Thread
+     * 这样才能保证线程的运行模型可控
+     * 在Java中线程:OS线程=1:1
+     * 因此线程资源的实例化是后置到任务被执行的时候
+     */
     private volatile Thread thread; // 线程执行器持有一个线程 每个Executor持有一个线程(相当于有且只有一个线程的线程池)
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
@@ -368,7 +374,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      */
     protected void addTask(Runnable task) {
         ObjectUtil.checkNotNull(task, "task");
-        if (!offerTask(task)) {
+        if (!this.offerTask(task)) {
             reject(task);
         }
     }
@@ -377,7 +383,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         if (isShutdown()) {
             reject();
         }
-        return taskQueue.offer(task);
+        return this.taskQueue.offer(task);
     }
 
     /**
@@ -561,6 +567,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     /**
      * Run the tasks in the {@link #taskQueue}
+     */
+    /**
+     * 为什么这个地方声明了一个run()的抽象方法
+     * 可以这么判断
+     * 谁持有Thread 跟Thread扯上关系 谁就关注Thread被回调之后要执行的entry point的方法
+     * 因此
+     * 当前类持有Thread
+     * 所以它要声明一个方法让子类去关注 以便控制Thread的线程模型
      */
     protected abstract void run();
 

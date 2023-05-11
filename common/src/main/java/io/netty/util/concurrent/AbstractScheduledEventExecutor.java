@@ -165,6 +165,9 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         return scheduledTask != null && scheduledTask.deadlineNanos() <= nanoTime();
     }
 
+    /**
+     * 一次性定时任务
+     */
     @Override
     public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
         ObjectUtil.checkNotNull(command, "command");
@@ -174,12 +177,15 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         }
         validateScheduled0(delay, unit);
 
-        return schedule(new ScheduledFutureTask<Void>(
+        return this.schedule(new ScheduledFutureTask<Void>(
                 this,
                 command,
                 deadlineNanos(unit.toNanos(delay))));
     }
 
+    /**
+     * 一次性定时任务
+     */
     @Override
     public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
         ObjectUtil.checkNotNull(callable, "callable");
@@ -192,6 +198,9 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         return schedule(new ScheduledFutureTask<V>(this, callable, deadlineNanos(unit.toNanos(delay))));
     }
 
+    /**
+     * 周期性定时任务
+     */
     @Override
     public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
         ObjectUtil.checkNotNull(command, "command");
@@ -207,10 +216,13 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         validateScheduled0(initialDelay, unit);
         validateScheduled0(period, unit);
 
-        return schedule(new ScheduledFutureTask<Void>(
+        return this.schedule(new ScheduledFutureTask<Void>(
                 this, command, deadlineNanos(unit.toNanos(initialDelay)), unit.toNanos(period)));
     }
 
+    /**
+     * 周期性定时任务
+     */
     @Override
     public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
         ObjectUtil.checkNotNull(command, "command");
@@ -227,7 +239,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         validateScheduled0(initialDelay, unit);
         validateScheduled0(delay, unit);
 
-        return schedule(new ScheduledFutureTask<Void>(
+        return this.schedule(new ScheduledFutureTask<Void>(
                 this, command, deadlineNanos(unit.toNanos(initialDelay)), -unit.toNanos(delay)));
     }
 
@@ -251,15 +263,33 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
         scheduledTaskQueue().add(task.setId(++nextTaskId));
     }
 
+    /**
+     * NioEventLoop负责接收所有类型的定时任务
+     *   - 一次性的定时任务
+     *   - 周期性的定时任务
+     *     - fixedDelay
+     *     - fixedRate
+     * 定时任务跟普通任务一样 最终都会缓存在SingleThreadEventExecutor::taskQueue中
+     */
     private <V> ScheduledFuture<V> schedule(final ScheduledFutureTask<V> task) {
         if (inEventLoop()) {
             scheduleFromEventLoop(task);
         } else {
             final long deadlineNanos = task.deadlineNanos();
             // task will add itself to scheduled task queue when run if not expired
-            if (beforeScheduledTaskSubmitted(deadlineNanos)) {
-                execute(task);
+            if (beforeScheduledTaskSubmitted(deadlineNanos)) { // 定时任务期待被执行的时间已经过了 当前如果可以的话就立即执行这个任务一次
+                /**
+                 * 又调用了SingleThreadEventExecutor::execute()方法
+                 *   - 在调用链里面肯定会通过是否立即执行这样一个参数控制当前任务先执行一次 但是NioEventLoop中的线程运行\阻塞控制权不在任务本体 主要控制者是Selector
+                 *   - 然后将这个任务继续保存在taskQueue中
+                 */
+                this.execute(task);
             } else {
+                /**
+                 * 当前任务还没到执行时机
+                 * 又调用了SingleThreadEventExecutor::execute()方法
+                 *   - 仅仅是将任务缓存在taskQueue
+                 */
                 lazyExecute(task);
                 // Second hook after scheduling to facilitate race-avoidance
                 if (afterScheduledTaskSubmitted(deadlineNanos)) {

@@ -13,8 +13,8 @@ import java.util.concurrent.TimeUnit;
 public class NioEventLoopGroupTest02 {
 
     public static void main(String[] args) {
-        test00();
-        // test01();
+        // test00();
+        test01();
     }
 
     /**
