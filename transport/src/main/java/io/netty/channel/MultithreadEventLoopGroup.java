@@ -34,6 +34,11 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(MultithreadEventLoopGroup.class);
 
+    /**
+     * 初始化NioEventLoopGroup时候不指定nThread(NioEventLoop工作线程数量) 给定一个默认值
+     * 这个默认值是跟运行系统的cpu核数有关系=CPU(核数)*2
+     *   - 也可以通过系统变量设置io.netty.eventLoopThreads
+     */
     private static final int DEFAULT_EVENT_LOOP_THREADS;
 
     static {

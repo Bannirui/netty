@@ -26,6 +26,7 @@ final class DefaultSelectStrategy implements SelectStrategy {
     private DefaultSelectStrategy() { }
 
     /**
+     * 函数编程
      * selectSupplier回调接口
      *     - 在NioEventLoop中是IO多路复用器Selector的非阻塞方式执行select()方法 返回值只有两种情况
      *         - 0值 没有Channel处于IO事件就绪状态

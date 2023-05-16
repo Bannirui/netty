@@ -220,7 +220,7 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
             EventLoopTaskQueueFactory queueFactory) {
         if (queueFactory == null) {
             /**
-             * MPSC队列
+             * 依赖jctools的MPSC队列实现
              *   - 多生产者
              *   - 单消费者
              */
