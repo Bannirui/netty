@@ -49,6 +49,13 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
      * Create a new instance using the specified number of threads, {@link ThreadFactory} and the
      * {@link SelectorProvider} which is returned by {@link SelectorProvider#provider()}.
      */
+    /**
+     * @param nThreads
+     *   - server端
+     *     - bossGroup->1
+     *     - workerGroup
+     *   - client端
+     */
     public NioEventLoopGroup(int nThreads) {
         this(nThreads, (Executor) null);
     }
@@ -69,10 +76,28 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
         this(nThreads, threadFactory, SelectorProvider.provider());
     }
 
+    /**
+     *
+     * @param nThreads
+     *   - server端
+     *     - bossGroup->1
+     *     - workerGroup
+     *   - client端
+     * @param executor
+     *  - server端
+     *    - bossGroup->null
+     *    - workerGroup
+     *  - client端
+     */
     public NioEventLoopGroup(int nThreads, Executor executor) {
         /**
          * executor用于开启NioEventLoop线程所需要的线程执行器
-         * SelectorProvider.provider()用于创建selector
+         * SelectorProvider.provider()用于创建selector 屏蔽了OS平台差异 做到了跨平台特性
+         * 多路复用器是跟OS平台强相关的 不同平台有不同实现
+         *   - freebsd\macosx->kqueue
+         *   - linux->epoll
+         *   - windows->poll
+         *   - ...
          */
         this(nThreads, executor, SelectorProvider.provider());
     }
@@ -94,11 +119,25 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
         this(nThreads, executor, selectorProvider, DefaultSelectStrategyFactory.INSTANCE);
     }
 
+    /**
+     *
+     * @param nThreads
+     *   - server
+     *     - bossGroup->1
+     *     - workerGroup
+     *   - client
+     * @param executor->null
+     * @param selectorProvider->SelectorProvider.provider()
+     * @param selectStrategyFactory->DefaultSelectStrategyFactory.INSTANCE
+     */
     public NioEventLoopGroup(int nThreads,
                              Executor executor, // null
-                             final SelectorProvider selectorProvider, // 创建Java的NIO复用器
-                             final SelectStrategyFactory selectStrategyFactory
+                             final SelectorProvider selectorProvider, // 创建Java的NIO复用器的实现
+                             final SelectStrategyFactory selectStrategyFactory // select策略 在Netty中NioEventLoop这个工作线程需要关注的事件包括了IO任务和普通任务 将来线程会阻塞在Selector多路复用器上 执行一次select调用怎么筛选IO任务普通任务
     ) {
+        /**
+         * RejectedExecutionHandlers.reject()提供了拒绝策略
+         */
         super(nThreads, executor, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());
     }
 
@@ -179,16 +218,39 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
      *   - 在MultithreadEventExecutorGroup定义了一个抽象方法
      *   - 延迟到当前类进行实现
      * 关注的内容就是创建NioEventLoop实例
+     * @param executor 线程执行器 实现是ThreadPerTaskExecutor
+     * @param args 3个元素的数组
+     *               - SelectorProvider.provider()
+     *               - DefaultSelectStrategyFactory.INSTANCE
+     *               - RejectedExecutionHandlers.reject()
      */
     @Override
     protected EventLoop newChild(Executor executor, Object... args) throws Exception { // executor=ThreadPerTaskExecutor实例 args=[SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]
-        SelectorProvider selectorProvider = (SelectorProvider) args[0]; // Java中对IO多路复用器的实现 依赖Jdk的版本 Window=WindowsSelectorProvider MacOSX=KQueueSelectorProvider Linux=EPollSelectorProvider
-        SelectStrategyFactory selectStrategyFactory = (SelectStrategyFactory) args[1]; // DefaultSelectStrategyFactory实例 任务选择策略(如何从taskQueue任务队列中选择一个任务)
-        RejectedExecutionHandler rejectedExecutionHandler = (RejectedExecutionHandler) args[2]; // RejectedExecutionHandlers实例
+        /**
+         * 实例是SelectorProvider.provider()
+         * Java中对IO多路复用器的实现
+         * 依赖Jdk的版本
+         *   - Window=WindowsSelectorProvider
+         *   - MacOSX=KQueueSelectorProvider
+         *   - Linux=EPollSelectorProvider
+         */
+        SelectorProvider selectorProvider = (SelectorProvider) args[0];
+        /**
+         *  DefaultSelectStrategyFactory实例
+         *  实例是DefaultSelectStrategyFactory.INSTANCE
+         *  任务选择策略(如何从taskQueue任务队列中选择一个任务) 本质就是轮询
+         *    - 数组长度是2的幂次方->位运算
+         *    - 数组长度不是2的幂次方->取模
+         */
+        SelectStrategyFactory selectStrategyFactory = (SelectStrategyFactory) args[1];
+        RejectedExecutionHandler rejectedExecutionHandler = (RejectedExecutionHandler) args[2];
         EventLoopTaskQueueFactory taskQueueFactory = null;
         EventLoopTaskQueueFactory tailTaskQueueFactory = null;
 
         int argsLength = args.length;
+        /**
+         * 如果客户端指定了taskQueueFactory和tailTaskQueueFactory就使用客户端指定
+         */
         if (argsLength > 3) taskQueueFactory = (EventLoopTaskQueueFactory) args[3]; // null
         if (argsLength > 4) tailTaskQueueFactory = (EventLoopTaskQueueFactory) args[4]; // null
         return new NioEventLoop(this, // this是NioEventLoopGroup实例 在构造NioEventLoop的时候将线程是实例传给parent属性

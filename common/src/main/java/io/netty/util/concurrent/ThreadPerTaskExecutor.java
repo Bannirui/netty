@@ -29,8 +29,22 @@ public final class ThreadPerTaskExecutor implements Executor { // 只有一个ex
         this.threadFactory = threadFactory;
     }
 
+    /**
+     * 任务执行器
+     * 一般用来在线程池\任务执行器的实现中负责驱动任务的执行
+     * @param command 提交给任务执行的具体任务
+     */
     @Override
     public void execute(Runnable command) {
-        threadFactory.newThread(command).start(); // 为每个任务新建一个线程 这个execute方法就是用来开启NioEventLoop线程用的
+        /**
+         * 资源懒加载
+         * 在Java中线程是宝贵的资源
+         * Java线程:OS线程=1:1
+         * 针对这么宝贵的线程 可以立即进行Thread构造方法的属性赋值 但是不要继续调用start()方法
+         *   - start()放触发系统调用 用户空间和内核空间切换 开销较大
+         *   - 就等到用的时候再进行系统调用 使线程状态处于就绪
+         *   - 等待CPU的调度 被CPU调度起来之后会回调进入entry point 内核->Thread::run->command::run(用户指定的代码片段)
+         */
+        threadFactory.newThread(command).start();
     }
 }

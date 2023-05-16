@@ -21,3 +21,7 @@ record dynamic item for study
 - [ ] 0x0B.Netty中Channel的register注册是什么语义 NioEventLoop::register
 - [ ] 0x0C.Netty中实例化Thread时机是在任务被执行的时候
 - [ ] 0x0D.NioEventLoop::run()执行IO任务
+- [ ] 0x0E.NioEventLoop::taskQueue中任务的区别(如何区分定时任务一次性还是周期性)
+- [ ] 0x0F.NioEventLoopGroup::next()
+- [ ] 0x10.NioEventLoop这个组件的启动时机 Netty是事件驱动(整体的运转流程不需要外界干预是自发性根据事件状态驱动、初始事件是怎么生成的) 需要外界手动提交一个任务(作用是可以驱动事件模型转动的核心)
+- [X] 0x11.回头关注NioEventLoopGroup和NioEventLoop的初始化详细过程

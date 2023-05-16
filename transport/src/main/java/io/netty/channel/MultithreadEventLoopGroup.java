@@ -47,6 +47,19 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
     /**
      * @see MultithreadEventExecutorGroup#MultithreadEventExecutorGroup(int, Executor, Object...)
      */
+    /**
+     *
+     * @param nThreads
+     *   - server
+     *     - bossGroup->1
+     *     - workerGroup
+     *   - client
+     * @param executor->null
+     * @param args 3个元素
+     *             - SelectorProvider.provider()
+     *             - DefaultSelectStrategyFactory.INSTANCE
+     *             - RejectedExecutionHandlers.reject()
+     */
     protected MultithreadEventLoopGroup(int nThreads,
                                         Executor executor, // null
                                         Object... args // [SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]

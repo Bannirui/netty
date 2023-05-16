@@ -95,7 +95,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private volatile Thread thread; // 线程执行器持有一个线程 每个Executor持有一个线程(相当于有且只有一个线程的线程池)
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
-    private final Executor executor; // 线程执行器 触发它的execute()方法就会创建一个真正的线程
+
+    /**
+     * 强化原始的Executor任务执行器
+     * 将Executor跟NioEventLoop绑定起来
+     * Executor本身是ThreadPerTaskExecutor实例 创建线程这个动作延迟到任务执行的时候
+     */
+    private final Executor executor;
     private volatile boolean interrupted;
 
     private final CountDownLatch threadLock = new CountDownLatch(1);
@@ -111,6 +117,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      */
     private final boolean addTaskWakesUp;
     private final int maxPendingTasks;
+
+    /**
+     * RejectedExecutionHandlers.reject()
+     */
     private final RejectedExecutionHandler rejectedExecutionHandler;
 
     private long lastExecutionTime; // 最近一次执行任务的时间
@@ -190,6 +200,17 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler");
     }
 
+    /**
+     * 属性赋值
+     *   - addTaskWakesUp 默认值false
+     *   - maxPendingTasks
+     *   - executor Executor跟NioEventLoop绑定之后形成的新的Executor
+     *   - taskQueue MPSC任务队列
+     *   - rejectedExecutionHandler RejectedExecutionHandlers.reject()的返回值
+     * @param parent NioEventLoop归属的NioEventLoopGroup
+     * @param executor ThreadPerTaskExecutor的实例
+     * @param addTaskWakesUp 默认值false
+     */
     protected SingleThreadEventExecutor(EventExecutorGroup parent,
                                         Executor executor,
                                         boolean addTaskWakesUp,
@@ -199,7 +220,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         super(parent); // 设置parent 也就是NioEventLoopGroup实例
         this.addTaskWakesUp = addTaskWakesUp; // 标识唤醒阻塞线程的方式 NioEventLoop阻塞发生在复用器操作上 因此这个设置为false
         this.maxPendingTasks = DEFAULT_MAX_PENDING_EXECUTOR_TASKS;
-        this.executor = ThreadExecutorMap.apply(executor, this); // 初始化线程执行器 ThreadPerTaskExecutor实例 不是给NioEventLoopGroup线程池使用的 而是给里面的线程NioEventLoop使用的 作用是开启NioEventLoop实例中的线程(真正的线程Thread)
+        /**
+         * 强化原始的Executor任务执行器
+         * 将Executor跟NioEventLoop绑定起来
+         * Executor本身是ThreadPerTaskExecutor实例 创建线程这个动作延迟到任务执行的时候
+         */
+        this.executor = ThreadExecutorMap.apply(executor, this);
         this.taskQueue = ObjectUtil.checkNotNull(taskQueue, "taskQueue"); // 创建任务队列 提交给NioEventLoop的任务都会进入到这个taskQueue中等待被执行 这个taskQueue容量默认值16 任务队列 NioEventLoop需要负责IO事件和非IO事件 通常它都是在执行selector::select方法或者正在处理selectedKeys 如果要submit一个任务给它 任务就会被放到taskQueue中 等它来轮询 该队列是线程安全的LinkedBlockingQueue
         this.rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler"); // 任务队列taskQueue的默认容量是16 如果submit的任务堆积到了16 再往里面提交任务就会触发拒绝策略的执行
     }

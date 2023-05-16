@@ -48,6 +48,14 @@ public final class ThreadExecutorMap {
      * Decorate the given {@link Executor} and ensure {@link #currentExecutor()} will return {@code eventExecutor}
      * when called from within the {@link Runnable} during execution.
      */
+    /**
+     * 将Executor任务执行器跟NioEventLoop绑定起来
+     * 将来实际执行任务的是Executor
+     * 但是驱动Executor工作的是NioEventLoop
+     * @param executor ThreadPerTaskExecutor实例
+     * @param eventExecutor NioEventLoop实例
+     * @return
+     */
     public static Executor apply(final Executor executor, final EventExecutor eventExecutor) {
         ObjectUtil.checkNotNull(executor, "executor");
         ObjectUtil.checkNotNull(eventExecutor, "eventExecutor");
@@ -62,6 +70,12 @@ public final class ThreadExecutorMap {
     /**
      * Decorate the given {@link Runnable} and ensure {@link #currentExecutor()} will return {@code eventExecutor}
      * when called from within the {@link Runnable} during execution.
+     */
+    /**
+     *
+     * @param command NioEventLoop通过execute\submit\schedule...接收的任务
+     * @param eventExecutor NioEventLoop实例
+     * @return
      */
     public static Runnable apply(final Runnable command, final EventExecutor eventExecutor) {
         ObjectUtil.checkNotNull(command, "command");

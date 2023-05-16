@@ -114,7 +114,11 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     private Selector unwrappedSelector; // Java原生的IO多路复用器
     private SelectedSelectionKeySet selectedKeys; // 有IO事件达到的Channel
 
-    private final SelectorProvider provider; // IO多路复用器提供器 用于创建多路复用器实现
+    /**
+     * 负责创建IO多路复用器 SelectorProvider::provider
+     * 用于创建多路复用器实现
+     */
+    private final SelectorProvider provider;
 
     private static final long AWAKE = -1L;
     private static final long NONE = Long.MAX_VALUE;
@@ -125,7 +129,12 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     //    other value T    when EL is waiting with wakeup scheduled at time T
     private final AtomicLong nextWakeupNanos = new AtomicLong(AWAKE); // 如果NioEventLoop线程处于阻塞状态 下一次啥时候将它唤醒
 
-    private final SelectStrategy selectStrategy; // 这个select是针对taskQueue任务队列中任务的选择策略
+    /**
+     * 定义了将来Selector的1次select怎么处理任务
+     *   - IO任务怎么处理
+     *   - taskQueue任务队列中任务怎么处理
+     */
+    private final SelectStrategy selectStrategy;
 
     /**
      * 一个NioEventLoop处理的事情分为两个
@@ -143,7 +152,22 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     private int cancelledKeys;
     private boolean needsToSelectAgain;
 
-    NioEventLoop(NioEventLoopGroup parent, // 标识EventLoop归属于哪个group
+    /**
+     * 构造方法的访问修饰符是默认的 只能在同包级别下访问 也就是说不对外暴露
+     * 当前类属性赋值
+     *   - selectorProvider 提供创建当前OS的多路复用器实例
+     *   - selectStrategy 定义了Selector多路复用器1次select操作下如何处理任务
+     *   - selector 基于Java原生Selector优化的版本
+     *   - unwrappedSelector Java原生Selector
+     * @param parent NioEventLoopGroup实例 标识着NioEventLoop归谁管理
+     * @param executor 任务执行器 ThreadPerTaskExecutor的实例 负责执行任务 逻辑关系上是跟NioEventLoop绑定的
+     * @param selectorProvider 负责创建IO多路复用器 SelectorProvider::provider
+     * @param strategy DefaultSelectStrategyFactory.INSTANCE 负责Selector多路复用器1次select操作如何选择任务(IO任务\普通任务)
+     * @param rejectedExecutionHandler RejectedExecutionHandlers.reject() 定义了NioEventLoop中taskQueue任务队列满了怎么办
+     * @param taskQueueFactory 定义了如何创建taskQueue任务队列->null
+     * @param tailTaskQueueFactory 定义了如何创建tailTaskQueue任务队列->null
+     */
+    NioEventLoop(NioEventLoopGroup parent,
                  Executor executor, // 线程执行器 将线程和EventLoop绑定
                  SelectorProvider selectorProvider, // Java中IO多路复用器提供器
                  SelectStrategy strategy, // 正常任务队列选择策略
@@ -151,16 +175,39 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
                  EventLoopTaskQueueFactory taskQueueFactory, // 非IO任务
                  EventLoopTaskQueueFactory tailTaskQueueFactory // 收尾任务
     ) {
-        super(parent,
+        /**
+         * 为什么要用MPSC队列
+         *   - 为什么要用队列这个数据结构
+         *     - FIFO特性
+         *     - Netty是NioEventLoop线程:任务=1:N 所以从任务视角来看 任务有先后
+         *   - 为什么不是用现有的数据结构比如ArrayBlockingQueue\LinkedBlockingQueue\PriorityQueue
+         *     - 首先得保证线程安全
+         *     - 其次它们的生产者\消费者模型是N:N
+         *     - 但是Netty中现在场景是1个NioEventLoop工作线程 N个任务 也就是生产者:消费者=N:1
+         */
+        super(parent, // NioEventLoop归属的NioEventLoopGroup
                 executor,
                 false,
-                newTaskQueue(taskQueueFactory), // 非IO任务队列
+                newTaskQueue(taskQueueFactory), // 非IO任务队列 Netty对队列数据结构的优化
                 newTaskQueue(tailTaskQueueFactory), // 收尾任务队列
                 rejectedExecutionHandler
         ); // 调用父类构造方法
-        this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider"); // IO多路复用器提供器 用于创建多路复用器实现
-        this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy"); // 这个select是针对taskQueue任务队列中任务的选择策略
-        final SelectorTuple selectorTuple = this.openSelector(); // 开启NIO中的组件 selector 意味着NioEventLoopGroup这个线程池中每个线程NioEventLoop都有自己的selector
+        /**
+         * IO多路复用器提供器 用于创建多路复用器实现
+         */
+        this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider");
+        /**
+         * 定义了将来Selector的1次select怎么处理任务
+         *   - IO任务怎么处理
+         *   - taskQueue任务队列中任务怎么处理
+         */
+        this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
+        /**
+         * 开启NIO中的组件Selector
+         * 通过上面提供的selectorProvider创建适配当前OS平台的Selector多路复用器实现
+         * 意味着NioEventLoopGroup这个线程池中每个线程NioEventLoop都有自己的selector
+         */
+        final SelectorTuple selectorTuple = this.openSelector();
         /**
          * 创建NioEventLoop绑定的selector对象
          * 初始化了IO多路复用器
@@ -172,6 +219,11 @@ public final class NioEventLoop extends SingleThreadEventLoop { // netty线程�
     private static Queue<Runnable> newTaskQueue(
             EventLoopTaskQueueFactory queueFactory) {
         if (queueFactory == null) {
+            /**
+             * MPSC队列
+             *   - 多生产者
+             *   - 单消费者
+             */
             return newTaskQueue0(DEFAULT_MAX_PENDING_TASKS);
         }
         return queueFactory.newTaskQueue(DEFAULT_MAX_PENDING_TASKS);

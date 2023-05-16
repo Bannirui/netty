@@ -32,8 +32,9 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
 
     /**
      * 策略模式
-     * NioEventLoop的线程数是2的倍数 一种线程选择方式
-     * NioEventLoop的线程数不是2的倍数 一种线程选择方式
+     *   - NioEventLoop的线程数是2的倍数 一种线程选择方式
+     *   - NioEventLoop的线程数不是2的倍数 一种线程选择方式
+     * 本质就是提供了一种轮询方式 让NioEventLoopGroup高效地从children数组中返回一个NioEventLoop实例
      */
     @Override
     public EventExecutorChooser newChooser(EventExecutor[] executors) {
@@ -44,6 +45,12 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         }
     }
 
+    /**
+     * 判断val是否是2的幂次方
+     * @param val NioEventLoop数组长度
+     * @return true标识val是2的幂次方
+     *         false标识val不是2的幂次方
+     */
     private static boolean isPowerOfTwo(int val) { // 判断是否是2的幂次方
         return (val & -val) == val;
     }
@@ -52,13 +59,16 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         private final AtomicInteger idx = new AtomicInteger();
         private final EventExecutor[] executors;
 
+        /**
+         * @param executors NioEventLoopGroup的children数组
+         */
         PowerOfTwoEventExecutorChooser(EventExecutor[] executors) {
             this.executors = executors;
         }
 
         /**
          * next()方法的实现就是选择下一个线程的方法
-         * 如果线程数是2的倍数 通过位运算 效率高
+         * 如果线程数是2的倍数 通过位运算而不是取模 这样效率更高
          */
         @Override
         public EventExecutor next() { // 线程池线程数是2的幂次方 位运算
@@ -73,6 +83,9 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         private final AtomicLong idx = new AtomicLong();
         private final EventExecutor[] executors; // 在EventLoopGroup构造器中初始化的EventLoop数组
 
+        /**
+         * @param executors NioEventLoopGroup的children数组
+         */
         GenericEventExecutorChooser(EventExecutor[] executors) {
             this.executors = executors;
         }
