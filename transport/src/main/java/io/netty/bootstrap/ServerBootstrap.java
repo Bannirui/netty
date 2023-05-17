@@ -41,12 +41,17 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     private final Map<AttributeKey<?>, Object> childAttrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
     private final ServerBootstrapConfig config = new ServerBootstrapConfig(this); // 创建ServerBootstrapConfig实例 对象中bootstrap属性持有ServerBootstrap的实例 可以通过config获取到bootstrap所有的属性
 
-    // 关注成功连接的请求
+    /**
+     * 服务端将workerGroup作为subReactor维护在ServerBootstrap里面
+     */
     private volatile EventLoopGroup childGroup;
 
     /**
-     * 作用在workerGroup线程组
-     * 只监听已经成功连接服务端的那些客户端{@link Channel}
+     * 作用域跟NioEventLoopGroup是一样的 或者说handler是寄宿在NioEventLoopGroup 严格来说是寄宿在NioEventLoopGroup的NioEventLoop中
+     *   - 对于服务端而言
+     *     - bossGroup -> handler
+     *     - workerGroup -> childHandler
+     *   - 对于客户端而言 只有一个group 也就只有handler
      */
     private volatile ChannelHandler childHandler;
 
@@ -74,6 +79,18 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
      * Set the {@link EventLoopGroup} for the parent (acceptor) and the child (client). These
      * {@link EventLoopGroup}'s are used to handle all the events and IO for {@link ServerChannel} and
      * {@link Channel}'s.
+     */
+    /**
+     * ServerBootstrap组件通过group方法接收2个NioEventLoopGroup
+     * 将来主要的作用
+     *   - Netty是事件驱动 给驱动的事件提供入口
+     *   - NioEventLoop是线程模型的核心 将这个模型引进来
+     *   - 父子关系 谁是父 谁是子
+     *     - 所有的这些设计都是在为Reactor网络模型做铺垫
+     *       - 在服务端NioEventLoopGroup一般是创建2个
+     *       - 这2个其中1个可以指派为mainReactor的mainGroup 另1个可以指派为subReactor的subGroup
+     *     - 父就是Reactor中的mainReactor 子就是subReactor
+     *     - 自然而然 bossGroup就是父 workerGroup就是子
      */
     public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGroup) { // 设置线程池
         super.group(parentGroup); // boss线程池组交给父类

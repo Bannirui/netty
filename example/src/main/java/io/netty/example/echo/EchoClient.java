@@ -31,10 +31,11 @@ public final class EchoClient {
 
     public static void main(String[] args) throws Exception {
         // Configure the client.
-        EventLoopGroup group = new NioEventLoopGroup(); // 客户端1个group Netty中的多个线程
+        EventLoopGroup workerGroup = new NioEventLoopGroup(); // 客户端1个group Netty中的多个线程
         try {
             Bootstrap b = new Bootstrap(); // 创建客户端实例
-            b.group(group)
+            b
+                .group(workerGroup)
              .channel(NioSocketChannel.class) // 根据NioSocketChannel创建了ChannelFactory->在下面connect()时机->ChannelFactory创建NioSocketChannel实例创建
              .option(ChannelOption.TCP_NODELAY, true)
              .handler(new ChannelInitializer<SocketChannel>() {
@@ -52,7 +53,7 @@ public final class EchoClient {
             f.channel().closeFuture().sync(); // 客户端connect成功之后开到这行代码 channel()方法获取该future关联的channel channel.closeFuture()也是一个异步方法 然后main线程调用sync()拿到返回或者抛出异常 sync()拿到返回的条件是: 有某个线程关闭了SocketChannel 往往是因为需要停掉服务 然后那个线程通过setSuccess()方法设置future为成功或者通过setFailure()方法设置future为失败
         } finally {
             // Shut down the event loop to terminate all threads.
-            group.shutdownGracefully();
+            workerGroup.shutdownGracefully();
         }
     }
 }

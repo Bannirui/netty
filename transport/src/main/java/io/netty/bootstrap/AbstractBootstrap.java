@@ -49,9 +49,24 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     @SuppressWarnings("unchecked")
     private static final Map.Entry<AttributeKey<?>, Object>[] EMPTY_ATTRIBUTE_ARRAY = new Map.Entry[0];
 
+    /**
+     * 广义来说 这个group就是提供给mainReactor的
+     *   - 对于服务端而言 有bossGroup和workerGroup 因此是bossGroup
+     *   - 对于客户端而言 只有一个group
+     */
     volatile EventLoopGroup group;
 
     /**
+     * 为什么要维护一个Channel工厂
+     * 因为将来要依赖这个工厂去创建对应的NettyChannel的实例
+     *   - NioServerSocketChannel
+     *   - NioSocketChannel
+     * 有个NettyChannel就可以跟JavaChannel关联上
+     *   - 通过JavaChannel进行底层的Socket相关编程
+     *     - 服务端的bind\listen\accept
+     *     - 客户端的connect
+     *     - 连接建立之后进而通过Socket读写 但是Java里面其实也不通过Socket开发读写了 而是面向JavaChannel进行读写开发 因此在Netty里面就可以直接面向NettyChannel进行开发读写
+     *
      * Channel创建工厂->内部阈维护了xxxChannel的默认构造器->触发时机->{@link AbstractBootstrap#initAndRegister()}->newInstance()方式创建xxxChannel实例
      *
      * {@link NioServerSocketChannel#NioServerSocketChannel()}->创建服务端Chanel实例
@@ -67,11 +82,24 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     // The order in which ChannelOptions are applied is important they may depend on each other for validation
     // purposes.
+    /**
+     * 收集缓存ServerBootstrap和Bootstrap指定的配置
+     * 将来针对客户端Socket和服务端被动Socket进行设置时
+     * 再从这个缓存中获取配置项
+     *   - Client
+     *     - Nagle算法是否禁用
+     *   - Server
+     *     - backlog指定连接等待队列
+     */
     private final Map<ChannelOption<?>, Object> options = new LinkedHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> attrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
 
     /**
-     * 作用在bossGroup 监听{@link Channel}的状态变更和动作
+     * 作用域跟NioEventLoopGroup是一样的 或者说handler是寄宿在NioEventLoopGroup 严格来说是寄宿在NioEventLoopGroup的NioEventLoop中
+     *   - 对于服务端而言
+     *     - bossGroup -> handler
+     *     - workerGroup -> childHandler
+     *   - 对于客户端而言 只有一个group 也就只有handler
      */
     private volatile ChannelHandler handler;
 
@@ -94,6 +122,12 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * The {@link EventLoopGroup} which is used to handle all the events for the to-be-created
      * {@link Channel}
      */
+    /**
+     * 将NioEventLoopGroup这个组件给关联到启动引导流程里面 有个NioEventLoopGroup自然也就有了NioEventLoop
+     * 服务端需要bossGroup和workerGroup
+     * 客户端只需要workerGroup
+     * 因此提供了1个形参的接口
+     */
     public B group(EventLoopGroup group) {
         if (this.group != null) throw new IllegalStateException("group set already");
         this.group = group; // group属性赋值为EventLoopGroup实例 服务端ServerBootstrap传进来的是bossGroup 客户端Bootstrap传进来的是group
@@ -111,6 +145,12 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * {@link Channel} implementation has no no-args constructor.
      */
     /**
+     * 在启动引导流程中配置Channel
+     *   - 将Netty跟Chanel的关系建立 因为在Java领域内网络编程开发的数据读写是不直接面向Socket 所以抽象出来的Channel就是提供给我们做数据读写的
+     *   - 引进NettyChannel的作用也是为了间接引入JavaChannel
+     *     - NioServerSocketChannel->ServerSocketChannel::bind\listen\accept
+     *     - NioSocketChannel->SocketChannel::connect
+     *     - 建立连接之后的的读写也是通过Channel完成的
      * 创建channelFactory->等到特定时机->创建SocketChannel
      *
      * 形参指向的类是
