@@ -24,6 +24,8 @@
 
 SRC_DIR = src/main/c
 UTIL_SRC_DIR = target/netty-jni-util
+# JNI_INCLUDE_DIR = $(JAVA_HOME)/include
+JAVA_HOME = /usr/lib/jvm/java-8-openjdk
 JNI_INCLUDE_DIR = $(JAVA_HOME)/include
 JNI_INCLUDES = -I$(JNI_INCLUDE_DIR) -I$(JNI_INCLUDE_DIR)/$(JNI_PLATFORM)
 LIB = $(LIB_DIR)/$(LIB_NAME).a

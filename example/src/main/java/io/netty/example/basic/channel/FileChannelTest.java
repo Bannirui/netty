@@ -3,7 +3,7 @@ package io.netty.example.basic.channel;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 
 /**
  * @author dingrui
@@ -66,7 +66,7 @@ public class FileChannelTest {
         String newData = "new string to write to file..." + System.currentTimeMillis();
         ByteBuffer buf = ByteBuffer.allocate(48);
         buf.clear();
-        buf.put(newData.getBytes(StandardCharsets.UTF_8));
+        buf.put(newData.getBytes(Charset.defaultCharset()));
         buf.flip();
         while (buf.hasRemaining()) {
             inChannel.write(buf);
