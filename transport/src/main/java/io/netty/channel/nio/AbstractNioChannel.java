@@ -50,8 +50,14 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     private static final InternalLogger logger =
             InternalLoggerFactory.getInstance(AbstractNioChannel.class);
 
+    // jdk的channel 绑定jdk底层的ServerSocketChannel netty的channel跟jdk的channel关系是组合关系 在netty的channel中有个jdk的channel成员变量 这个成员变量定义在AbstractNioChannel中
     private final SelectableChannel ch;
-    protected final int readInterestOp; // 关注的IO事件 NioServerSocketChannel初始化的时候关注的是连接事件(16)
+    /**
+     * channel代表的socket往多路复用器selector注册时候要关注的事件
+     * NioSocketChannel用来读写数据 关注的事件类型是OP_READ可读事件
+     * NioServerSocketChannel用来连接 关注的事件类型是OP_ACCEPT连接事件
+     */
+    protected final int readInterestOp;
     volatile SelectionKey selectionKey; // 复用器待监听的Channel
     boolean readPending;
     private final Runnable clearReadPendingRunnable = new Runnable() {
@@ -78,10 +84,17 @@ public abstract class AbstractNioChannel extends AbstractChannel {
      */
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
         super(parent);
-        this.ch = ch; // jdk的channel 绑定jdk底层的ServerSocketChannel netty的channel跟jdk的channel关系是组合关系 在netty的channel中有个jdk的channel成员变量 这个成员变量定义在AbstractNioChannel中
-        this.readInterestOp = readInterestOp; // Channel关注的IO事件 NioSocketChannel关注OP_READ可读事件 NioServerSocketChannel关注OP_ACCEPT(16)连接事件
+        // jdk的channel 绑定jdk底层的ServerSocketChannel netty的channel跟jdk的channel关系是组合关系 在netty的channel中有个jdk的channel成员变量 这个成员变量定义在AbstractNioChannel中
+        this.ch = ch;
+        /**
+         * channel代表的socket往多路复用器selector注册时候要关注的事件
+         * NioSocketChannel用来读写数据 关注的事件类型是OP_READ可读事件
+         * NioServerSocketChannel用来连接 关注的事件类型是OP_ACCEPT连接事件
+         */
+        this.readInterestOp = readInterestOp;
         try {
-            ch.configureBlocking(false); // 将jdk的channel设置为非阻塞模式(系统调用fcntl)
+            // 将jdk的channel设置为非阻塞模式(系统调用fcntl)
+            ch.configureBlocking(false);
         } catch (IOException e) {
             try {
                 ch.close();

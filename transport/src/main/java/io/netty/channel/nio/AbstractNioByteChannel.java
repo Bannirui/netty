@@ -62,8 +62,14 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
      * @param parent            the parent {@link Channel} by which this instance was created. May be {@code null}
      * @param ch                the underlying {@link SelectableChannel} on which it operates
      */
+    /**
+     *
+     * @param parent 当前这个channel是不是由其他的channel创建的
+     * @param ch jdk的channel
+     */
     protected AbstractNioByteChannel(Channel parent, SelectableChannel ch) {
-        super(parent, ch, SelectionKey.OP_READ); // SocketChannel关心的是OP_READ可读事件
+        // channel映射到系统层就是socket 将来要注册到多路复用器上 关注的事件是可读事件
+        super(parent, ch, SelectionKey.OP_READ);
     }
 
     /**

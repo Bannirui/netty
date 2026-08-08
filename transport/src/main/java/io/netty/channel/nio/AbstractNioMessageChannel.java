@@ -32,6 +32,8 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
 
     /**
      * @see AbstractNioChannel#AbstractNioChannel(Channel, SelectableChannel, int)
+     * @param ch jdk封装的channel
+     * @param readInterestOp 将来往selector上注册时候要关注的事件类型
      */
     protected AbstractNioMessageChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
         super(parent, ch, readInterestOp);

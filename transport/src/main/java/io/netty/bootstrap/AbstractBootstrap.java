@@ -160,6 +160,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * 其作用就是提供SocketChannel的无参构造器 生成ChannelFactory
      */
     public B channel(Class<? extends C> channelClass) { // 指定Channel类型->根据Channel特定实现的无参构造方法->反射创建Channel实例
+        // 把channel的构造方法包起来当作factory 把factory维护在当前channelFactory成员
         return this.channelFactory(new ReflectiveChannelFactory<C>(channelClass)); // NioServerSocket的class对象
     }
 

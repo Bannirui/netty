@@ -75,6 +75,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
      * <p><em>unsafe</em>属性赋值
      */
     protected AbstractChannel(Channel parent) {
+        // channel是不是其他channel创建的
         this.parent = parent;
         id = this.newId(); // 给每个channel分配一个唯一id
         /**

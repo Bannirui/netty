@@ -27,8 +27,13 @@ public class ReflectiveChannelFactory<T extends Channel> implements ChannelFacto
 
     private final Constructor<? extends T> constructor;
 
+    /**
+     * 根据传进来的channel类把它的构造函数包起来 就是对应的channel的工厂 想什么时候要channel实例就构造一个
+     * @param clazz {@link io.netty.channel.socket.nio.NioServerSocketChannel} {@link io.netty.channel.socket.nio.NioSocketChannel}
+     */
     public ReflectiveChannelFactory(Class<? extends T> clazz) {
         try {
+            // factory持有Channel的无参构造方法 将来创建channel实例就是调用这个构造方法
             this.constructor = clazz.getConstructor(); // NioServerSocket的class对象
         } catch (NoSuchMethodException e) {
             throw new IllegalArgumentException("Class " + StringUtil.simpleClassName(clazz) + " does not have a public non-arg constructor", e);
@@ -38,7 +43,13 @@ public class ReflectiveChannelFactory<T extends Channel> implements ChannelFacto
     @Override
     public T newChannel() {
         try {
-            return this.constructor.newInstance(); // 反射调用Channel的无参构造方法创建Channel NioSocketChannel充当客户端功能 它的创建时机在connect()的时候 NioServerSocketChannel充当服务端 它的创建时机在bind()的时候
+            /**
+             * 把channel的构造方法包成factory交给别人 当它需要channel实例的时候就用factory的这个方法构造一个channel出来
+             * 反射调用Channel的无参构造方法创建Channel
+             * NioSocketChannel用来读写 它的创建时机在connect的时候
+             * NioServerSocketChannel用来连接 它的创建时机在bind的时候
+             */
+            return this.constructor.newInstance();
         } catch (Throwable t) {
             throw new ChannelException("Unable to create Channel from class " + constructor.getDeclaringClass(), t);
         }
