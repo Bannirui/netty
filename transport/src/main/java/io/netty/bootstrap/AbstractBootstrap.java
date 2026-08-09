@@ -130,7 +130,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      */
     public B group(EventLoopGroup group) {
         if (this.group != null) throw new IllegalStateException("group set already");
-        this.group = group; // group属性赋值为EventLoopGroup实例 服务端ServerBootstrap传进来的是bossGroup 客户端Bootstrap传进来的是group
+        // group属性赋值为EventLoopGroup实例 服务端ServerBootstrap传进来的是bossGroup 客户端Bootstrap只有1个group
+        this.group = group;
         return self();
     }
 
@@ -469,7 +470,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
          *             - 添加ServerBootstrapAcceptor处理来自客户端的连接
          *             - NioEventLoop线程循环
          *
-         * 并且一旦Channel一旦跟EventLoop绑定 以后Channel的所有事件都由这个EventLoop线程处理
+         * 并且Channel一旦跟EventLoop绑定 以后Channel的所有事件都由这个EventLoop线程处理
          * 所谓的注册指的是将Java的Channel注册到复用器Selector上
          *     - 逻辑绑定映射关系 Netty Channel跟NioEventLoop关系绑定
          *     - 物理注册复用器
@@ -498,7 +499,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         //         because bind() or connect() will be executed *after* the scheduled registration task is executed
         //         because register(), bind(), and connect() are all bound to the same thread.
         /**
-         * // 执行到这 说明后续可以进行NioSocketChannel::connect()方法或者NioServerSocketChannel::bind()方法
+         * 执行到这 说明后续可以进行NioSocketChannel::connect()方法或者NioServerSocketChannel::bind()方法
          * 两种情况
          *     -1 register动作是在eventLoop中发起 那么到这里的时候 register一定已经完成了
          *     -2 如果register任务已经提交到eventLoop中 也就是进到了eventLoop中的taskQueue中 由于后续的connect和bind方法也会进入到同一个eventLoop的taskQueue中 所以一定会先执行register成功 再执行connect和bind方法

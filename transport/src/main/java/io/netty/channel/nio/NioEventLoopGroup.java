@@ -52,9 +52,9 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
     /**
      * @param nThreads
      *   - server端
-     *     - bossGroup->1
-     *     - workerGroup
-     *   - client端
+     *     - bossGroup负责连接给的1
+     *     - workerGroup负责读写给的0
+     *   - client端给的0
      */
     public NioEventLoopGroup(int nThreads) {
         this(nThreads, (Executor) null);
@@ -83,11 +83,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
      *     - bossGroup->1
      *     - workerGroup
      *   - client端
-     * @param executor
-     *  - server端
-     *    - bossGroup->null
-     *    - workerGroup
-     *  - client端
+     * @param executor 没有指定就是null
      */
     public NioEventLoopGroup(int nThreads, Executor executor) {
         /**
@@ -120,20 +116,15 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
     }
 
     /**
-     *
-     * @param nThreads
-     *   - server
-     *     - bossGroup->1
-     *     - workerGroup
-     *   - client
+     * @param nThreads 负责连接的传1 读写的传0
      * @param executor->null
-     * @param selectorProvider->SelectorProvider.provider()
-     * @param selectStrategyFactory->DefaultSelectStrategyFactory.INSTANCE
+     * @param selectorProvider->SelectorProvider.provider() 用来创建java封装的多路复用器selector
+     * @param selectStrategyFactory->DefaultSelectStrategyFactory.INSTANC select策略 在Netty中NioEventLoop这个工作线程需要关注的事件包括了IO任务和普通任务 将来线程会阻塞在Selector多路复用器上 执行一次select调用怎么筛选IO任务普通任务
      */
     public NioEventLoopGroup(int nThreads,
-                             Executor executor, // null
-                             final SelectorProvider selectorProvider, // 创建Java的NIO复用器的实现
-                             final SelectStrategyFactory selectStrategyFactory // select策略 在Netty中NioEventLoop这个工作线程需要关注的事件包括了IO任务和普通任务 将来线程会阻塞在Selector多路复用器上 执行一次select调用怎么筛选IO任务普通任务
+                             Executor executor,
+                             final SelectorProvider selectorProvider,
+                             final SelectStrategyFactory selectStrategyFactory
     ) {
         /**
          * RejectedExecutionHandlers.reject()提供了拒绝策略
@@ -253,6 +244,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
          */
         if (argsLength > 3) taskQueueFactory = (EventLoopTaskQueueFactory) args[3]; // null
         if (argsLength > 4) tailTaskQueueFactory = (EventLoopTaskQueueFactory) args[4]; // null
+        // NioEventLoop就是NioEventLoopGroup这个线程池中的个体 相当于线程池中的线程 在每个NioEventLoop实例内部都持有一个自己Thread实例
         return new NioEventLoop(this, // this是NioEventLoopGroup实例 在构造NioEventLoop的时候将线程是实例传给parent属性
                 executor, // ThreadPerTaskExecutor实例
                 selectorProvider,
@@ -260,6 +252,6 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup { // 事件循�
                 rejectedExecutionHandler, // taskQueue任务队列满了拒绝策略(向上抛异常)
                 taskQueueFactory, // 非IO任务队列
                 tailTaskQueueFactory // 收尾任务队列
-        ); // NioEventLoop就是NioEventLoopGroup这个线程池中的个体 相当于线程池中的线程 在每个NioEventLoop实例内部都持有一个自己Thread实例
+        );
     }
 }

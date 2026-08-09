@@ -888,6 +888,15 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         execute(ObjectUtil.checkNotNull(task, "task"), false);
     }
 
+    /**
+     * 有任务提交过来希望被执行
+     * EventLoop本质是跟Java的线程1:1映射的 而且EventLoop只有一个线程 所以意味着这个线程只会启动一次
+     * 创建线程的时机就是在任务提交过来的时候
+     *   - java向cpp创建线程
+     *   - cpp向os创建线程 并且告诉os这个线程的entry point是哪儿 对应着java的一个函数
+     *   - 等线程被cpu调度起来后就会顺着entry point回调到java里面的这个函数
+     * 所以在EventLoop中用inEventLoop作为标识线程是不是已经创建了 保证只有一个线程 不会重复创建
+     */
     private void execute(Runnable task, boolean immediate) {
         /**
          * NioEventLoop只有一个线程 且它的阻塞点只有在IO多路复用器操作上
@@ -904,7 +913,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         boolean inEventLoop = super.inEventLoop();
         this.addTask(task); // 添加任务到taskQueue中 如果任务队列已经满了 就触发拒绝策略(抛异常)
         if (!inEventLoop) {
-            this.startThread(); // NioEventLoop线程创建启动的时机就是提交进来的第一个异步任务
+            // NioEventLoop线程创建启动的时机就是提交进来的第一个异步任务 在这个方法里面创建线程并为线程的调度指定好entry point
+            this.startThread();
             if (this.isShutdown()) {
                 boolean reject = false;
                 try {
@@ -1016,7 +1026,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) { // state状态标识线程已经启动 CAS确保线程只能被创建启动一次
                 boolean success = false;
                 try {
-                    this.doStartThread(); // 启动线程 在每个NioEventLoop只会被执行一次 保证NioEventLoop:线程=1:1
+                    // 启动线程 在每个NioEventLoop只会被执行一次 保证NioEventLoop:线程=1:1
+                    this.doStartThread();
                     success = true;
                 } finally {
                     if (!success) {
@@ -1060,7 +1071,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
-                    SingleThreadEventExecutor.this.run(); // 执行run()方法 该方法为抽象方法 在NioEventLoop中有实现 线程的死循环(不断地处理IO任务和非IO任务)
+                    // 执行run()方法 该方法为抽象方法 在NioEventLoop中有实现 线程的死循环(不断地处理IO任务和非IO任务)
+                    SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {
                 } finally {

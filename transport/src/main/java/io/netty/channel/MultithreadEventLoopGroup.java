@@ -54,20 +54,16 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
      */
     /**
      *
-     * @param nThreads
-     *   - server
-     *     - bossGroup->1
-     *     - workerGroup
-     *   - client
-     * @param executor->null
+     * @param nThreads 负责连接的给1 给0就用默认值=cput核数*2
+     * @param executor null
      * @param args 3个元素
-     *             - SelectorProvider.provider()
-     *             - DefaultSelectStrategyFactory.INSTANCE
-     *             - RejectedExecutionHandlers.reject()
+     *             - SelectorProvider.provider() 多路复用器实例
+     *             - DefaultSelectStrategyFactory.INSTANCE selector的select的策略
+     *             - RejectedExecutionHandlers.reject() selector的拒绝策略
      */
     protected MultithreadEventLoopGroup(int nThreads,
-                                        Executor executor, // null
-                                        Object... args // [SelectorProvider SelectStrategyFactory RejectedExecutionHandlers]
+                                        Executor executor,
+                                        Object... args
     ) {
         super(nThreads == 0 ? DEFAULT_EVENT_LOOP_THREADS : nThreads, executor, args);
     }
