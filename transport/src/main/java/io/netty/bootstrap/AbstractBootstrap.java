@@ -448,7 +448,6 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         /**
          * 至此NioEventLoop线程还没启动
          * 在register(...)方法之前 已经完成的工作
-         *
          *     - channel实例
          *         - pipeline实例化
          *             - pipeline中添加了{@link ChannelInitializer}辅助类的实例 而这个辅助类的触发时机是在Channel跟EventLoop线程绑定之后
@@ -461,30 +460,15 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
          * 对于ServerBootstrap而言是bossGroup线程组
          * 对于Bootstrap而言只有一个group线程组
          *
-         * --- 分割线 ---
-         *
-         * 线程组的register(...)方法就是从group中轮询出来一个NioEventLoop线程执行register(...)方法 Channel跟NioEventLoop关联起来并注册到NioEventLoop的Selector上
-         *     - 注册复用器结束后 NioEventLoop线程发布一些事件让关注的handler执行
-         *         - handlersAdd(...)事件 触发
-         *         - ...
-         *             - 添加ServerBootstrapAcceptor处理来自客户端的连接
-         *             - NioEventLoop线程循环
-         *
-         * 并且Channel一旦跟EventLoop绑定 以后Channel的所有事件都由这个EventLoop线程处理
-         * 所谓的注册指的是将Java的Channel注册到复用器Selector上
-         *     - 逻辑绑定映射关系 Netty Channel跟NioEventLoop关系绑定
-         *     - 物理注册复用器
-         *         - 通过向NioEventLoop提交任务方式启动NioEventLoop线程
-         *         - NioEventLoop线程将Jdk的Channel注册到Selector复用器上
-         *             - Socket注册复用器 不关注事件
-         *             - 触发事件 让pipeline中的handler关注响应(此刻pipeline中有head ChannelInitializer实例 tail)
-         *                 - 发布handlerAdd事件 触发ChannelInitializer方法执行
-         *                 - 发布register事件
+         * 执行register方法 最终由NioEventLoop调用到AbstractChannel里面执行 要是EventLoop线程还没启动 刚好这个时机会触发线程的启动
+         *   - Channel跟NioEventLoop关联起来 Channel一旦跟EventLoop绑定 以后Channel的所有事件都由这个EventLoop线程处理
+         *   - 并注册到NioEventLoop的Selector上 所谓的注册指的是将Java的Channel注册到复用器Selector上
          */
         ChannelFuture regFuture = this
                 .config()
                 .group() // {#link ServerBootstrap#group()}或者{@link Bootstrap#group()}传进去的 比如在服务端就是boss线程组 客户端只有一个group
                 .register(channel);
+        // 到这channel就被注册到selector上了 eventLoop线程被启动了 上面init方法添加的ChannelInitializer也会被加调
         if (regFuture.cause() != null) { // 在register过程中发生异常
             if (channel.isRegistered()) channel.close();
             else channel.unsafe().closeForcibly();
@@ -501,7 +485,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         /**
          * 执行到这 说明后续可以进行NioSocketChannel::connect()方法或者NioServerSocketChannel::bind()方法
          * 两种情况
-         *     -1 register动作是在eventLoop中发起 那么到这里的时候 register一定已经完成了
+         *     -1 register动作是在eventLoop中发起 那么到这里的时候register一定已经完成了
          *     -2 如果register任务已经提交到eventLoop中 也就是进到了eventLoop中的taskQueue中 由于后续的connect和bind方法也会进入到同一个eventLoop的taskQueue中 所以一定会先执行register成功 再执行connect和bind方法
          */
         return regFuture;
