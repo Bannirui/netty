@@ -343,6 +343,7 @@ public abstract class ReplayingDecoder<S> extends ByteToMessageDecoder {
         replayable.setCumulation(in);
         try {
             while (in.isReadable()) {
+                // netty累积的字节流[0....readIndex]表示被读过了 一定要记录下来 因为下面在解码的时候可能发生异常 如果因为字节流不够解析出完整的一个协议 是要回滚的 等待TCP继续送数据过来
                 int oldReaderIndex = checkpoint = in.readerIndex();
                 int outSize = out.size();
 
@@ -364,6 +365,7 @@ public abstract class ReplayingDecoder<S> extends ByteToMessageDecoder {
                 S oldState = state;
                 int oldInputLength = in.readableBytes();
                 try {
+                    // 开始真正的解码
                     decodeRemovalReentryProtection(ctx, replayable, out);
 
                     // Check if this handler was removed before continuing the loop.
@@ -386,6 +388,8 @@ public abstract class ReplayingDecoder<S> extends ByteToMessageDecoder {
                         }
                     }
                 } catch (Signal replay) {
+                    // 解码报错了 并且约定的这个报错是要回滚的情况 比如netty累积的字节流是不够一个完整的协议的 这种情况已经解码出来的数据是不能丢的 只能恢复buf里面的读指针位置 然后等tcp送数据过来
+                    // 再次检查一下这个异常确保是约定的回滚
                     replay.expect(REPLAY);
 
                     // Check if this handler was removed before continuing the loop.
@@ -397,6 +401,7 @@ public abstract class ReplayingDecoder<S> extends ByteToMessageDecoder {
                     }
 
                     // Return to the checkpoint (or oldPosition) and retry.
+                    // 在真正解码之前已经保存了read index 现在decode过程中发现buf中数据不够解码成完整的协议 要恢复 就把buf的read index恢复到解码之前就行
                     int checkpoint = this.checkpoint;
                     if (checkpoint >= 0) {
                         in.readerIndex(checkpoint);
