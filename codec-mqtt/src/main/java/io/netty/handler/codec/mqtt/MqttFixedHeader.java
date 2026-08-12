@@ -31,6 +31,14 @@ public final class MqttFixedHeader {
     private final boolean isRetain;
     private final int remainingLength;
 
+    /**
+     *
+     * @param messageType fixed_header的byte1高4位值对应的类型
+     * @param isDup fixed_header的byte1低3位的标识DUP
+     * @param qosLevel fixed_header的byte1的低[2...1]的值
+     * @param isRetain fixed_header的byte1的低0位表示RETAIN
+     * @param remainingLength fixed_header的byte2...解析出来的remain length
+     */
     public MqttFixedHeader(
             MqttMessageType messageType,
             boolean isDup,

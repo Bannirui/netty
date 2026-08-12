@@ -271,6 +271,7 @@ public abstract class ReplayingDecoder<S> extends ByteToMessageDecoder {
 
     private final ReplayingDecoderByteBuf replayable = new ReplayingDecoderByteBuf();
     private S state;
+    // 读到哪儿了 [0...checkpoint]都是读过的
     private int checkpoint = -1;
 
     /**

@@ -53,6 +53,12 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
      * We start at READ_FIXED_HEADER, followed by
      * READ_VARIABLE_HEADER and finally READ_PAYLOAD.
      */
+    /**
+     * mqtt协议格式是 fixed header+variable header+payload
+     * 数据是源源不断流的方式从tcp过来 不能说解析一般发现数据不够一个协议就丢掉 所以用状态机的方式
+     * 意味着下次准备解析数据是从什么样状态开始的
+     * 初始的时候肯定从fixed_header开始的
+     */
     enum DecoderState {
         READ_FIXED_HEADER,
         READ_VARIABLE_HEADER,
@@ -76,6 +82,7 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
     }
 
     public MqttDecoder(int maxBytesInMessage, int maxClientIdLength) {
+        // 初始化的时候肯定标记协议从fixed_header开始解析
         super(DecoderState.READ_FIXED_HEADER);
         this.maxBytesInMessage = ObjectUtil.checkPositive(maxBytesInMessage, "maxBytesInMessage");
         this.maxClientIdLength = ObjectUtil.checkPositive(maxClientIdLength, "maxClientIdLength");
@@ -85,8 +92,10 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
     protected void decode(ChannelHandlerContext ctx, ByteBuf buffer, List<Object> out) throws Exception {
         switch (state()) {
             case READ_FIXED_HEADER: try {
+                // 开始解析fixed_header
                 mqttFixedHeader = decodeFixedHeader(ctx, buffer);
                 bytesRemainingInVariablePart = mqttFixedHeader.remainingLength();
+                // fixed_header已经解析出来了 保存现在已经读到什么地方了 推进状态机 准备读variable header
                 checkpoint(DecoderState.READ_VARIABLE_HEADER);
                 // fall through
             } catch (Exception cause) {
@@ -162,12 +171,40 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
      * @param buffer the buffer to decode from
      * @return the fixed header
      */
+    /**
+     * 从tcp字节流里面解析出mqtt的fixed_header
+     * Bit         7   6   5   4               |     3   |  2   1 |   0
+     * byte 1   MQTT Control Packet type       |   DUP   |  QoS   | RETAIN
+     * byte 2…                         Remaining Length
+     *
+     * byte2...是变长编码 最少用1个字节 最多用4个字节
+     * 每个字节的高7位是标识是不是变长 要不要继续解析 剩下的低[6...0]这7位才是真正的有效值
+     * 因为这两个原因 1是只有4个字节的上限 2是每个字节做多只能用7位 mqtt为了这么点bit能表达更大的length
+     * 就采用了128进制
+     * 第1个字节表达的长度=第1个字节的低7位有效值*128^0
+     * 第2个字节表达的长度=第2个字节的低7位有效值*128^1
+     * 第3个字节表达的长度=第2个字节的低7位有效值*128^2
+     * 第4个字节表达的长度=第2个字节的低7位有效值*128^3
+     *
+     * byte1的高4位是mqtt的类型对应的值
+     * byte1的低4位按照位有不同的作用
+     *      Bits    3  |  2    1  |  0
+     *             DUP |   QoS    | RETAIN
+     * @param ctx
+     * @param buffer 里面是tcp字节流的数据
+     * @return fixed_header
+     */
     private static MqttFixedHeader decodeFixedHeader(ChannelHandlerContext ctx, ByteBuf buffer) {
+        // fixed_header的byte1
         short b1 = buffer.readUnsignedByte();
-
+        // mqtt fixed_header的byte1的高4位 mqtt的类型
         MqttMessageType messageType = MqttMessageType.valueOf(b1 >> 4);
+        // byte1的低4位情况
+        // 第3位被置位了说明是DUP
         boolean dupFlag = (b1 & 0x08) == 0x08;
+        // 第2位和第1位这两位组合起来的值是多少 无非就是0 1 2 3这4种情况
         int qosLevel = (b1 & 0x06) >> 1;
+        // 第0位被置位了说明是RETAIN
         boolean retain = (b1 & 0x01) != 0;
 
         switch (messageType) {
@@ -222,19 +259,39 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
             default:
                 throw new DecoderException("Unknown message type, do not know how to validate fixed header");
         }
-
+        // 解析出来的length结果
         int remainingLength = 0;
+        // 解析length的时候第1个字节进制是128的0次方
         int multiplier = 1;
         short digit;
+        /**
+         * fixed_header里面的byte2编码特点 它不一定刚好仅仅是1个字节 这个字段本身就是变长的 最少1个字节 最多4个字节 怎么知道是不是变长的 在高7位标识
+         * 高7位 1表示remain length这个字段需要继续解析后面的字节 0表示这个字段的解析到此为止
+         * 低0到低6位 才是真正的长度内容
+         * 最多循环看4个字节 看高7位的表示决定要不要继续解析
+         */
         int loops = 0;
+        // 因为remain length至少占1个字节 所以用do...while 不管什么情况先搞出来1个字节拿出来它的内容 看后再看高7位的标识 决定要不要继续
         do {
+            // 先拿出来1个字节
             digit = buffer.readUnsignedByte();
+            /**
+             * mqtt不是按照10进制存储的 因为最多只能用4个字节表达remain length 而且每个字节只能用7个位
+             * 所以mqtt为了28个有效位能表达更大的长度 就用了128进制
+             * 第1个字节 n1*128^0
+             * 第2个字节 n2*128^1
+             * 第3个字节 n3*128^2
+             * 第4个字节 n4*128^3
+             */
+            // 当前这个字节的低7位有效内容拿出来 乘以当前字节的对应的进制
             remainingLength += (digit & 127) * multiplier;
+            // 下一个字节的进制在当前进制上成128
             multiplier *= 128;
             loops++;
-        } while ((digit & 128) != 0 && loops < 4);
+        } while ((digit & 128) != 0 && loops < 4); // 高7位置1了就继续 上限解析4个字节
 
         // MQTT protocol limits Remaining Length to 4 bytes
+        // 防御性检查 协议规定length这个byte2变成最多4个字节 要是第4个字节的标志位高7位还是1 就说明协议本身就有问题了 不规范
         if (loops == 4 && (digit & 128) != 0) {
             throw new DecoderException("remaining length exceeds 4 digits (" + messageType + ')');
         }
@@ -246,10 +303,11 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
     /**
      * Decodes the variable header (if any)
      * @param buffer the buffer to decode from
-     * @param mqttFixedHeader MqttFixedHeader of the same message
+     * @param mqttFixedHeader MqttFixedHeader of the same message 已经解析出来的fixed_header
      * @return the variable header
      */
     private Result<?> decodeVariableHeader(ChannelHandlerContext ctx, ByteBuf buffer, MqttFixedHeader mqttFixedHeader) {
+        // message type决定variable header长什么样子
         switch (mqttFixedHeader.messageType()) {
             case CONNECT:
                 return decodeConnectionVariableHeader(ctx, buffer);

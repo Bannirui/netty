@@ -15,9 +15,17 @@
 
 package io.netty.handler.codec.mqtt;
 
+/**
+ * fixed_header的byte1低4位上的第2位和第3位组合表示QoS字段
+ * 两个bit组合的有效值就是0 1 2 3
+ * 对应的枚举
+ */
 public enum MqttQoS {
+    // publish完事 最多就1次 不需要确认
     AT_MOST_ONCE(0),
+    // publish->puback 至少1次 发送方没有收到puback可能会重新发送 因此可能出现重新消息
     AT_LEAST_ONCE(1),
+    // publish->pubrec->pubrel->pubcomp 恰好1次 这4个packet type就是一组完整的QoS2状态机
     EXACTLY_ONCE(2),
     FAILURE(0x80);
 
