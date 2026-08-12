@@ -22,6 +22,26 @@ import io.netty.util.internal.StringUtil;
 /**
  * See <a href="https://public.dhe.ibm.com/software/dw/webservices/ws-mqtt/mqtt-v3r1.html#fixed-header">
  *     MQTTV3.1/fixed-header</a>
+ *
+ * Bit         7   6   5   4               |     3   |  2   1 |   0
+ * byte 1   MQTT Control Packet type       |   DUP   |  QoS   | RETAIN
+ * byte 2…                         Remaining Length
+ *
+ * byte2...是变长编码 最少用1个字节 最多用4个字节
+ * 所以fixed header最少2个字节 最多5个字节
+ *
+ * byte2...每个字节的高7位是标识是不是变长 要不要继续解析 剩下的低[6...0]这7位才是真正的有效值
+ * 因为这两个原因 1是只有4个字节的上限 2是每个字节做多只能用7位 mqtt为了这么点bit能表达更大的length
+ * 就采用了128进制
+ *   第1个字节表达的长度=第1个字节的低7位有效值*128^0*
+ *   第2个字节表达的长度=第2个字节的低7位有效值*128^1
+ *   第3个字节表达的长度=第2个字节的低7位有效值*128^2
+ *   第4个字节表达的长度=第2个字节的低7位有效值*128^3
+ *
+ * byte1的高4位是mqtt的类型对应的值
+ * byte1的低4位按照位有不同的作用
+ *      Bits    3  |  2    1  |  0
+ *             DUP |   QoS    | RETAIN
  */
 public final class MqttFixedHeader {
 
@@ -29,6 +49,7 @@ public final class MqttFixedHeader {
     private final boolean isDup;
     private final MqttQoS qosLevel;
     private final boolean isRetain;
+    // remain length是包含了fixed header后面的的variable header+payload
     private final int remainingLength;
 
     /**

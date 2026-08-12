@@ -68,6 +68,7 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
 
     private MqttFixedHeader mqttFixedHeader;
     private Object variableHeader;
+    // 先解析fixed header里面的remain length=variable header+payload 再根据fixed header里面的类型分别解析出来variable header 剩下payload占多少字节就知道了
     private int bytesRemainingInVariablePart;
 
     private final int maxBytesInMessage;
@@ -104,13 +105,17 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
             }
 
             case READ_VARIABLE_HEADER:  try {
+                // 开始解析variable header
                 final Result<?> decodedVariableHeader = decodeVariableHeader(ctx, buffer, mqttFixedHeader);
                 variableHeader = decodedVariableHeader.value;
                 if (bytesRemainingInVariablePart > maxBytesInMessage) {
                     buffer.skipBytes(actualReadableBytes());
                     throw new TooLongFrameException("too large message: " + bytesRemainingInVariablePart + " bytes");
                 }
+                // fixed header里面解析到的remain length是包含了fixed header后面的variable header和payload 现在variable header解析出来了知道了在tcp字节流里面variable header占了多少字节
+                // 那么剩下来的payload占多少字节
                 bytesRemainingInVariablePart -= decodedVariableHeader.numberOfBytesConsumed;
+                // variable header已经解析出来了 保存现在已经读到什么地方了 推进状态机 准备读payload
                 checkpoint(DecoderState.READ_PAYLOAD);
                 // fall through
             } catch (Exception cause) {
@@ -119,6 +124,7 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
             }
 
             case READ_PAYLOAD: try {
+                // 开始解析payload
                 final Result<?> decodedPayload =
                         decodePayload(
                                 ctx,
@@ -133,11 +139,13 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
                             "non-zero remaining payload bytes: " +
                                     bytesRemainingInVariablePart + " (" + mqttFixedHeader.messageType() + ')');
                 }
+                // payload已经解析出来了 保存现在已经读到什么地方了 推进状态机 现在已经解析了一个完整的mqtt协议了 那么下一次要解析的是下一个协议的fixed header
                 checkpoint(DecoderState.READ_FIXED_HEADER);
                 MqttMessage message = MqttMessageFactory.newMessage(
                         mqttFixedHeader, variableHeader, decodedPayload.value);
                 mqttFixedHeader = null;
                 variableHeader = null;
+                // 一个完整的mqtt协议完整的解析出来了 才放到out里面让netty传给pipeline里面后面的handler
                 out.add(message);
                 break;
             } catch (Exception cause) {
@@ -344,29 +352,49 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
         }
     }
 
+    /**
+     * connect类型的variable header包含的字段有
+     *   - Protocol Name 字符串 6个字节
+     *                   byte1 byte2 byte3 byte4 byte5 byte6
+     *                   MSB   LSB    M      Q     T    T
+     *   - Protocol Level 1个字节 值是5表示 Version5
+     *   - Connect Flags 1个字节 8位分别是
+     *                   Bit        7               6              5            4           3         2            1           0
+     *                       User Name Flag | Password Flag | Will Retain |        Will QoS     | Will Flag | Clean Start | Reserved
+     *   - Keep Alive 2个字节 整数
+     *   - Properties
+     * 编字符串的时候先给出字符串长度 再给字符串内容 MSB的高8位 LSB是低8位 组合起来就是字符串长度
+     */
     private static Result<MqttConnectVariableHeader> decodeConnectionVariableHeader(
             ChannelHandlerContext ctx,
             ByteBuf buffer) {
+        // 解析出字符串 字段Protocol Name是固定值MQTT
         final Result<String> protoString = decodeString(buffer);
+        // 编码MQTT用了6个字节
         int numberOfBytesConsumed = protoString.numberOfBytesConsumed;
-
+        // 编码Protocol Level用1个字节
         final byte protocolLevel = buffer.readByte();
         numberOfBytesConsumed += 1;
 
         MqttVersion version = MqttVersion.fromProtocolNameAndLevel(protoString.value, protocolLevel);
         MqttCodecUtil.setMqttVersion(ctx, version);
-
+        // flags占1字节
         final int b1 = buffer.readUnsignedByte();
         numberOfBytesConsumed += 1;
-
+        // 2个字节的整数
         final int keepAlive = decodeMsbLsb(buffer);
         numberOfBytesConsumed += 2;
-
+        // flags的高7位有没有被置位
         final boolean hasUserName = (b1 & 0x80) == 0x80;
+        // flags的高6位有没有被置位
         final boolean hasPassword = (b1 & 0x40) == 0x40;
+        // flags的高5位有没有被置位
         final boolean willRetain = (b1 & 0x20) == 0x20;
+        // 拿出来flags字节的低3和低4位的值
         final int willQos = (b1 & 0x18) >> 3;
+        // flags的低2位有没有被置位
         final boolean willFlag = (b1 & 0x04) == 0x04;
+        // flags的低1位有没有被置位
         final boolean cleanSession = (b1 & 0x02) == 0x02;
         if (version == MqttVersion.MQTT_3_1_1 || version == MqttVersion.MQTT_5) {
             final boolean zeroReservedFlag = (b1 & 0x01) == 0x0;
@@ -549,7 +577,7 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
      *
      * @param buffer the buffer to decode from
      * @param messageType  type of the message being decoded
-     * @param bytesRemainingInVariablePart bytes remaining
+     * @param bytesRemainingInVariablePart bytes remaining 现在字节流里面有多少字节是payload的
      * @param variableHeader variable header of the same message
      * @return the payload
      */
@@ -713,12 +741,33 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
         return new Result<ByteBuf>(b, bytesRemainingInVariablePart);
     }
 
+    /**
+     * mqtt对字符串的编码有两部分 字符串长度+字符串内容 字符串长度用2个字节
+     * 第1个字节是MSB是长度的高8位
+     * 第2个字节是LSB是长度的低8位
+     * 组合起来就是字符串的长度
+     *
+     * byte1 byte2    bytes
+     * MSB   LSB    字符串内容
+     * @param buffer
+     * @return
+     */
     private static Result<String> decodeString(ByteBuf buffer) {
         return decodeString(buffer, 0, Integer.MAX_VALUE);
     }
 
+
+    /**
+     * 从字节流里面读字符串
+     * @param buffer
+     * @param minBytes
+     * @param maxBytes
+     * @return
+     */
     private static Result<String> decodeString(ByteBuf buffer, int minBytes, int maxBytes) {
+        // 字符串的长度有多长
         int size = decodeMsbLsb(buffer);
+        // 在编码字符串的时候先用2个字节表示MSB和LSB
         int numberOfBytesConsumed = 2;
         if (size < minBytes || size > maxBytes) {
             buffer.skipBytes(size);
@@ -727,6 +776,7 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
         }
         String s = buffer.toString(buffer.readerIndex(), size, CharsetUtil.UTF_8);
         buffer.skipBytes(size);
+        // 又用了具体多少个长度编码真正的内容
         numberOfBytesConsumed += size;
         return new Result<String>(s, numberOfBytesConsumed);
     }
@@ -757,12 +807,20 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
 
     /**
      *  numberOfBytesConsumed = 2. return decoded result.
+     *  从字节流里面拿出2个字节
+     *  第1个字节是MSB表示字符串长度的高8位
+     *  第2个字节是LSB表示字符串长度的低8位
+     *  组合起来的16位整数大小
+     * @return 16位的整数
      */
     private static int decodeMsbLsb(ByteBuf buffer) {
         int min = 0;
         int max = 65535;
+        // 拿出第1个字节是msb
         short msbSize = buffer.readUnsignedByte();
+        // 拿出第2个字节是lsb
         short lsbSize = buffer.readUnsignedByte();
+        // msb是高8位 lsb是低8位 组合起来 就是字符串长度
         int result = msbSize << 8 | lsbSize;
         if (result < min || result > max) {
             result = -1;
@@ -798,6 +856,7 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
     private static final class Result<T> {
 
         private final T value;
+        // 编码value这个内容一共在字节流里面占了多少个字节
         private final int numberOfBytesConsumed;
 
         Result(T value, int numberOfBytesConsumed) {
