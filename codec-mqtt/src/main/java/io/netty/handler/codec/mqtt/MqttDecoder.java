@@ -99,6 +99,7 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
                 // fixed_header已经解析出来了 保存现在已经读到什么地方了 推进状态机 准备读variable header
                 checkpoint(DecoderState.READ_VARIABLE_HEADER);
                 // fall through
+                // 属于是小设计了 利用switch...case没有break就贯穿的特性 因为mqtt的协议是fixed header/variable header/payload 所以只要解析没问题就继续下去 知道最后要么完整的mqtt被解析出来放到out里面 要么有问题中断了等待decoder的下一个while过来
             } catch (Exception cause) {
                 out.add(invalidMessage(cause));
                 return;
@@ -124,7 +125,7 @@ public final class MqttDecoder extends ReplayingDecoder<DecoderState> {
             }
 
             case READ_PAYLOAD: try {
-                // 开始解析payload
+                // 开始解析payload payload的大小是bytesRemainingInVariablePart
                 final Result<?> decodedPayload =
                         decodePayload(
                                 ctx,

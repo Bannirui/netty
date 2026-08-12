@@ -265,10 +265,12 @@ import java.util.List;
  *        the state type which is usually an {@link Enum}; use {@link Void} if state management is
  *        unused
  */
+// 从这个名字就看得出来性质 它是带状态回滚的 在解码过程中发现buf里面数据不够的时候是要回滚到这一次解码之前的状态的
 public abstract class ReplayingDecoder<S> extends ByteToMessageDecoder {
 
     static final Signal REPLAY = Signal.valueOf(ReplayingDecoder.class, "REPLAY");
 
+    // 这个Buf是专门给这种带状态回滚的适配的 它把read方法重写了 在read之前都会检查一下buf里面的内容够不够 不够就抛异常
     private final ReplayingDecoderByteBuf replayable = new ReplayingDecoderByteBuf();
     private S state;
     // 读到哪儿了 [0...checkpoint]都是读过的
@@ -365,7 +367,7 @@ public abstract class ReplayingDecoder<S> extends ByteToMessageDecoder {
                 S oldState = state;
                 int oldInputLength = in.readableBytes();
                 try {
-                    // 开始真正的解码
+                    // 开始真正的解码 这个地方传的第2个参数是ReplayingDecoderByteBuf 它的每个read方法都被重写了 真正读之前会检查一下字节够不够 不够就抛约定的异常让下面catch捕获
                     decodeRemovalReentryProtection(ctx, replayable, out);
 
                     // Check if this handler was removed before continuing the loop.

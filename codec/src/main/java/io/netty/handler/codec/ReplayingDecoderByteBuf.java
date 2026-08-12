@@ -38,6 +38,7 @@ import io.netty.util.internal.StringUtil;
  */
 final class ReplayingDecoderByteBuf extends ByteBuf {
 
+    // 这就是约定的异常 buf里面的数据不够需要的时候就抛这个
     private static final Signal REPLAY = ReplayingDecoder.REPLAY;
 
     private ByteBuf buffer;
@@ -1081,7 +1082,15 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
         throw reject();
     }
 
+    /**
+     *  buf被2个指针划分成3块
+     *    [...read]  [read...write] [write...]
+     *   已经被读过的    还没被读的      待写的
+     * @param index 现在buf的读指针
+     * @param length 希望从buf里面读多少内容
+     */
     private void checkIndex(int index, int length) {
+        // 说白了就是检查可读区域够不够length个字节内容 不够就抛约定好的异常 调用方就知道这是啥意思了
         if (index + length > buffer.writerIndex()) {
             throw REPLAY;
         }
